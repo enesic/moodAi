@@ -6,13 +6,14 @@ from io import BytesIO
 st.set_page_config(page_title="Mood AI Therapist", page_icon="🧠", layout="wide")
 
 try:
-    import spotify_manager
+    import spotify_manager # YENİDEN spotify_manager OLDU
     import ai_psychologist
     import mood_card
 except ImportError as e:
     st.error(f"HATA: Dosyalar eksik. {e}")
     st.stop()
 
+# --- OTURUM YÖNETİMİ ---
 if 'token_info' not in st.session_state:
     st.session_state['token_info'] = None
 
@@ -28,20 +29,27 @@ if "code" in params and not st.session_state['token_info']:
     except Exception as e:
         st.error(f"Giriş hatası: {e}")
 
+# --- GİRİŞ KONTROLÜ ---
 token_info = st.session_state['token_info']
 sp = None
 
 if not token_info:
     st.title("🧠 Mood AI: Müzik Terapisti")
-    st.markdown("Devam etmek için lütfen Spotify hesabınızla giriş yapın.")
+    st.markdown("### Hoşgeldiniz 👋")
+    st.markdown("Size özel analiz ve çalma listesi için Spotify ile bağlanın.")
+    
     sp_oauth = spotify_manager.create_spotify_oauth()
     auth_url = sp_oauth.get_authorize_url()
+    
     st.link_button("🟢 Spotify ile Giriş Yap", auth_url, type="primary")
-    st.info("Not: Uygulamanın playlist oluşturabilmesi için izin vermeniz gerekmektedir.")
+    st.info("Bu uygulama Spotify hesabınızda sadece 'Playlist Oluşturma' izni ister.")
     st.stop()
 else:
     sp = spotify_manager.baglanti_kur(token_info)
 
+# =========================================================
+# ANA UYGULAMA
+# =========================================================
 ALT_TURLER = {
     "neseli_pop": ["Türkçe Pop Hareketli", "Yaz Hitleri", "Dance Pop", "Road Trip", "Serdar Ortaç Pop", "90'lar Türkçe Pop", "Disco", "K-Pop", "Reggaeton"],
     "huzunlu_slow": ["Akustik Hüzün", "Melankolik Indie", "Slow Pop", "Piyano & Yağmur", "Türkçe Damar", "Alternatif Balad", "Türkü", "Arabesk", "Kırık Kalpler"],
@@ -77,7 +85,7 @@ def akilli_tur_oner(text, tur_listesi):
     if not oneriler: return tur_listesi[:2]
     return list(set(oneriler))[:3]
 
-st.title("🧠 Mood AI: Yapay Zeka Terapisti")
+st.title("🧠 Mood AI: Müzik Terapisti")
 col_logout, col_space = st.columns([1, 8])
 with col_logout:
     if st.button("Çıkış"):
@@ -96,9 +104,7 @@ with col1:
         if dil == "Türkçe": dil_kod = "tr"
         elif dil == "Yabancı": dil_kod = "yabanci"
         
-        sarki_sayisi = st.slider("Şarkı Sayısı:", min_value=10, max_value=50, value=20, step=5)
-        
-        # YENİ: Enerji Seviyesi
+        sarki_sayisi = st.slider("Şarkı Sayısı:", min_value=5, max_value=50, value=20, step=5)
         enerji_seviyesi = st.select_slider("Enerji Seviyesi:", options=["Düşük", "Orta", "Yüksek"], value="Orta")
 
     if st.button("Analiz Et ✨", use_container_width=True):
@@ -132,7 +138,7 @@ with col1:
             with st.spinner("Şarkılar seçiliyor..."):
                 st.session_state['tracks'] = spotify_manager.sarki_arastirmasi_yap(
                     sp, mod, 0, st.session_state['dil'], secilen_turler, 
-                    st.session_state['sarki_sayisi'], enerji_seviyesi # <-- ENERJİ PARAMETRESİ
+                    st.session_state['sarki_sayisi'], enerji_seviyesi
                 )
 
 with col2:
@@ -157,10 +163,11 @@ with col2:
         st.divider()
 
         if tracks:
-            st.subheader("💊 Müzik Reçetesi")
-            track_uris = []
+            st.subheader(f"💊 Müzik Reçetesi ({len(tracks)} Şarkı)")
+            
             for i, t in enumerate(tracks):
-                track_uris.append(t['uri'])
+                track_uris = [tr['uri'] for tr in tracks] # Playlist için toplu
+                
                 c1, c2, c3 = st.columns([1, 4, 1])
                 with c1:
                     if t['image']: st.image(t['image'], use_container_width=True)
@@ -170,8 +177,8 @@ with col2:
                     st.caption(f"{t['artist']}")
                     if t['preview_url']: st.audio(t['preview_url'], format="audio/mp3")
                 with c3:
-                    if st.button("🔄", key=f"btn_degistir_{i}", help="Bu şarkıyı değiştir"):
-                        with st.spinner("Yeni şarkı aranıyor..."):
+                    if st.button("🔄", key=f"btn_degistir_{i}", help="Değiştir"):
+                        with st.spinner("..."):
                             mevcut_ids = [x['id'] for x in st.session_state['tracks']]
                             yeni_sarki = spotify_manager.tek_sarki_getir(
                                 sp, st.session_state['mod'], mevcut_ids, 
@@ -180,8 +187,6 @@ with col2:
                             if yeni_sarki:
                                 st.session_state['tracks'][i] = yeni_sarki
                                 st.rerun()
-                            else:
-                                st.warning("Benzer şarkı bulunamadı.")
                 st.divider()
             
             if st.button("✅ Spotify'a Kaydet", type="primary", use_container_width=True):
