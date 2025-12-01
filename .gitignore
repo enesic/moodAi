@@ -1,0 +1,17 @@
+# .gitignore dosyası içeriği:
+
+# --- Şifreler ve Ayarlar ---
+.env
+.venv/
+venv/
+__pycache__/
+
+# --- DEVASA DOSYALAR (Bunlar GitHub'a gitmemeli) ---
+veriseti/
+islenmis_veri/
+modeller/
+*.wav
+*.mp3
+*.h5
+*.npy
+*.pkl
