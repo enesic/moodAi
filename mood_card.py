@@ -7,37 +7,53 @@ FONT_PATH = "Roboto-Regular.ttf"
 
 def kart_olustur(mood, doktor_notu, sarki_adi=""):
     """
-    Ruh haline özel Instagram Story boyutunda kart oluşturur.
+    Ruh haline özel psikolojik renklerle Instagram Story kartı oluşturur.
     """
-    # 1. Renk Paleti (Arka Plan, Metin)
+    # --- PSİKOLOJİK RENK PALETİ (Arka Plan, Metin) ---
     renkler = {
-        "neseli_pop": ("#FFD700", "#FFFFFF"),       # Altın Sarısı / Beyaz
-        "huzunlu_slow": ("#2F4F4F", "#E6E6FA"),     # Koyu Gri-Mavi / Lavanta
-        "enerjik_spor": ("#FF4500", "#FFFFFF"),     # Turuncu Kırmızı / Beyaz
-        "sakin_akustik": ("#556B2F", "#F5F5DC"),    # Zeytin Yeşili / Bej
-        "indie_alternatif": ("#008080", "#E0FFFF"), # Teal / Açık Camgöbeği
-        "hard_rock_metal": ("#1C1C1C", "#D3D3D3"),  # Siyahımsı / Açık Gri
-        "elektronik_synth": ("#800080", "#EE82EE"), # Mor / Menekşe
-        "jazz_blues": ("#191970", "#B0C4DE"),       # Gece Mavisi / Açık Mavi
-        "rap_hiphop": ("#8B0000", "#FFC0CB")        # Koyu Kırmızı / Pembe
+        # Neşeli: Sarı (Enerji, Güneş) -> Yazı: Siyah (Okunabilirlik için)
+        "neseli_pop": ("#FFD700", "#000000"),       
+        
+        # Hüzünlü: Koyu Mavi/Gri (Melankoli, Derinlik) -> Yazı: Beyaz
+        "huzunlu_slow": ("#2C3E50", "#ECF0F1"),     
+        
+        # Enerjik: Turuncu/Kırmızı (Adrenalin, Hareket) -> Yazı: Beyaz
+        "enerjik_spor": ("#FF4500", "#FFFFFF"),     
+        
+        # Sakin: Açık Yeşil/Bej (Doğa, Huzur) -> Yazı: Koyu Yeşil
+        "sakin_akustik": ("#D4EFDF", "#145A32"),    
+        
+        # Indie: Mor (Yaratıcılık, Gizem) -> Yazı: Beyaz
+        "indie_alternatif": ("#8E44AD", "#F4ECF7"), 
+        
+        # Metal: Siyah (Güç, İsyan) -> Yazı: Kırmızımsı Beyaz
+        "hard_rock_metal": ("#000000", "#E74C3C"),  
+        
+        # Elektronik: Neon/Koyu (Fütüristik) -> Yazı: Neon Yeşili
+        "elektronik_synth": ("#1F1F1F", "#00FF00"), 
+        
+        # Caz: Lacivert/Altın (Sofistike, Lüks) -> Yazı: Altın Sarısı
+        "jazz_blues": ("#154360", "#F1C40F"),       
+        
+        # Rap: Koyu Gri/Altın (Sokak, Prestij) -> Yazı: Altın
+        "rap_hiphop": ("#1C2833", "#D4AC0D")        
     }
     
-    # Mod listesinde olmayan bir durum gelirse varsayılan renkleri kullan
-    bg_color, text_color = renkler.get(mood, ("#4682B4", "#FFFFFF"))
+    # Mod listesinde olmayan bir durum gelirse varsayılan renkleri kullan (Mavi/Beyaz)
+    bg_color, text_color = renkler.get(mood, ("#3498DB", "#FFFFFF"))
     
     # 2. Tuval Oluştur (600x1000 piksel - Story boyutu)
     W, H = 600, 1000
     img = Image.new('RGB', (W, H), color=bg_color)
     draw = ImageDraw.Draw(img)
     
-    # 3. Font Ayarları (Proje içindeki özel fontu kullan)
+    # 3. Font Ayarları
     try:
-        # Font boyutlarını belirle
         font_buyuk = ImageFont.truetype(FONT_PATH, 50)
         font_orta = ImageFont.truetype(FONT_PATH, 30)
         font_kucuk = ImageFont.truetype(FONT_PATH, 22)
     except OSError:
-        # Eğer font dosyası proje klasörüne atılmamışsa uyarı ver ve varsayılanı kullan
+        # Font yoksa varsayılanı kullan (Görüntü kalitesi düşebilir)
         print(f"UYARI: '{FONT_PATH}' dosyası bulunamadı. Varsayılan font kullanılıyor.")
         font_buyuk = ImageFont.load_default()
         font_orta = ImageFont.load_default()
@@ -54,15 +70,16 @@ def kart_olustur(mood, doktor_notu, sarki_adi=""):
     
     # Teşhis
     draw.text((40, 200), "TEŞHİS:", font=font_kucuk, fill=text_color)
-    # Mod ismindeki alt çizgileri boşlukla değiştir ve büyük harf yap
     clean_mood = mood.replace("_", " ").upper()
     draw.text((40, 230), clean_mood, font=font_orta, fill=text_color)
     
     # Doktor Notu
     draw.text((40, 320), "DOKTOR NOTU:", font=font_kucuk, fill=text_color)
     
-    # Metni kutuya sığacak şekilde parçala (Her satırda ~28 karakter)
-    lines = textwrap.wrap(doktor_notu, width=28) 
+    # Metni kutuya sığacak şekilde parçala (Parantez içindeki hata mesajlarını temizle)
+    clean_note = doktor_notu.split("(")[0].strip() # Hata mesajlarını kartta gösterme, şık dursun
+    
+    lines = textwrap.wrap(clean_note, width=28) 
     y_text = 350
     for line in lines:
         draw.text((40, y_text), line, font=font_orta, fill=text_color)
@@ -71,14 +88,13 @@ def kart_olustur(mood, doktor_notu, sarki_adi=""):
     # Şarkı Bilgisi (Varsa)
     if sarki_adi:
         y_text += 60
-        # Şarkı ismi çok uzunsa kısalt
         if len(sarki_adi) > 30:
             sarki_adi = sarki_adi[:27] + "..."
             
         draw.text((40, y_text), "♫ ÖNERİLEN PARÇA:", font=font_kucuk, fill=text_color)
         draw.text((40, y_text + 30), sarki_adi, font=font_orta, fill=text_color)
 
-    # Alt Bilgi
+    # Alt Bilgi (Instagram @kullaniciadi gibi eklenebilir)
     draw.text((40, H - 60), "Developed by MoodAI", font=font_kucuk, fill=text_color)
 
     return img
