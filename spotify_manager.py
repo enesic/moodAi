@@ -66,11 +66,13 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     if not secilen_turler: secilen_turler = ["Pop"]
 
     all_tracks = []
-    eklenen_sarkilar_ids = set()
     
-    # Her türden kaçar tane alacağını hesapla (Örn: 20 şarkı, 4 tür -> Her türden 5 şarkı)
-    # Garanti olsun diye biraz fazla isteyelim (+2)
-    limit_per_genre = math.ceil(sarki_sayisi / len(secilen_turler)) + 2
+    # Gelişmiş Filtreleme Hafızası
+    eklenen_sarkilar_unique_keys = set() # İsim + Sanatçı (Aynı şarkının farklı versiyonlarını engeller)
+    sanatci_sayaci = {} # Hangi sanatçıdan kaç tane aldık?
+
+    # Her türden kaçar tane alacağını hesapla (+3 esneklik payı)
+    limit_per_genre = math.ceil(sarki_sayisi / len(secilen_turler)) + 3
     search_limit = min(50, limit_per_genre + 5) 
 
     # Dil Ayarları
@@ -106,8 +108,7 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
             
             # Eğer Türkçe arama sonuç vermezse, global aramaya geç (Fallback)
             if (not results or not results['tracks']['items']) and dil_secenegi == 'tr':
-                 print(f"UYARI: {query} için sonuç bulunamadı, geniş arama yapılıyor.")
-                 query = f"{base_mood_tr} {tur}" # Tür adını mood ile birleştir
+                 query = f"{base_mood_tr} {tur}" 
                  results = sp.search(q=query, limit=search_limit, offset=0, type='track', market='TR')
 
             if results and 'tracks' in results:
@@ -115,10 +116,22 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
                 for item in results['tracks']['items']:
                     if count >= limit_per_genre: break 
                     
-                    track_id = item['id']
-                    if track_id in eklenen_sarkilar_ids: continue
+                    artist_name = item['artists'][0]['name']
+                    track_name = item['name']
                     
-                    eklenen_sarkilar_ids.add(track_id)
+                    # 1. KONTROL: Şarkı Daha Önce Eklendi mi? (İsim ve Sanatçı bazlı)
+                    unique_key = f"{track_name} - {artist_name}".lower()
+                    if unique_key in eklenen_sarkilar_unique_keys:
+                        continue
+                    
+                    # 2. KONTROL: Sanatçı Kotası Doldu mu? (Max 2 Şarkı)
+                    if sanatci_sayaci.get(artist_name, 0) >= 2:
+                        continue
+
+                    # Listeye Ekle
+                    eklenen_sarkilar_unique_keys.add(unique_key)
+                    sanatci_sayaci[artist_name] = sanatci_sayaci.get(artist_name, 0) + 1
+                    
                     all_tracks.append(_create_track_obj(item))
                     count += 1
                     
@@ -137,18 +150,14 @@ def tek_sarki_getir(sp, mood_kategorisi, exclude_ids=[], dil_secenegi='mix', sec
     if not sp: return None
     if not secilen_turler: secilen_turler = ["Pop"]
     
-    # Deneme Sayısı (Sonsuz döngüye girmemek için)
     max_retries = 3
     
     for _ in range(max_retries):
-        # Rastgele bir tür seç
         tur = random.choice(secilen_turler)
         is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz", "classical", "metal", "piano"]
         
-        # Rastgele bir offset
         offset = random.randint(0, 100)
         
-        # Sorgu
         query = ""
         if dil_secenegi == 'tr':
             query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
@@ -161,12 +170,13 @@ def tek_sarki_getir(sp, mood_kategorisi, exclude_ids=[], dil_secenegi='mix', sec
             results = sp.search(q=query, limit=10, offset=offset, type='track', market='TR')
             if results and 'tracks' in results:
                 for item in results['tracks']['items']:
+                    # Sadece ID kontrolü yeterli değil, isim kontrolü de yapabiliriz ama
+                    # tekli değişimde ID kontrolü genellikle yeterlidir.
                     if item['id'] not in exclude_ids:
-                        return _create_track_obj(item) # Bulduk!
+                        return _create_track_obj(item) 
         except:
             continue
             
-    # Eğer hala bulamadıysak, tür yerine genel moddan arayalım (Son Çare)
     try:
         tr_keywords = {
             "neseli_pop": "hareketli", "huzunlu_slow": "damar",
@@ -184,7 +194,7 @@ def tek_sarki_getir(sp, mood_kategorisi, exclude_ids=[], dil_secenegi='mix', sec
     except:
         pass
 
-    return None # Hiçbir şey bulamazsa (Çok düşük ihtimal)
+    return None 
 
 def playlisti_kaydet(sp, track_uris, mood_title):
     if not sp: return None, "Bağlantı yok"
