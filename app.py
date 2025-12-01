@@ -1,5 +1,6 @@
 import streamlit as st
 import random
+import os
 from io import BytesIO
 
 st.set_page_config(page_title="Mood AI Therapist", page_icon="🧠", layout="wide")
@@ -12,11 +13,10 @@ except ImportError as e:
     st.error(f"HATA: Dosyalar eksik. {e}")
     st.stop()
 
-# --- OTURUM YÖNETİMİ (SESSION STATE) ---
+# --- OTURUM YÖNETİMİ ---
 if 'token_info' not in st.session_state:
     st.session_state['token_info'] = None
 
-# URL'den gelen 'code' parametresini yakala (Spotify'dan dönünce bu çalışır)
 params = st.query_params
 if "code" in params and not st.session_state['token_info']:
     sp_oauth = spotify_manager.create_spotify_oauth()
@@ -24,7 +24,6 @@ if "code" in params and not st.session_state['token_info']:
         code = params["code"]
         token_info = sp_oauth.get_access_token(code)
         st.session_state['token_info'] = token_info
-        # URL'i temizle
         st.query_params.clear()
         st.rerun()
     except Exception as e:
@@ -35,36 +34,93 @@ token_info = st.session_state['token_info']
 sp = None
 
 if not token_info:
-    # GİRİŞ YAPILMAMIŞSA SADECE BUTON GÖSTER
     st.title("🧠 Mood AI: Müzik Terapisti")
     st.markdown("Devam etmek için lütfen Spotify hesabınızla giriş yapın.")
-    
     sp_oauth = spotify_manager.create_spotify_oauth()
     auth_url = sp_oauth.get_authorize_url()
-    
     st.link_button("🟢 Spotify ile Giriş Yap", auth_url, type="primary")
     st.info("Not: Uygulamanın playlist oluşturabilmesi için izin vermeniz gerekmektedir.")
-    st.stop() # Kodun geri kalanını çalıştırma
+    st.stop()
 else:
-    # GİRİŞ YAPILMIŞSA BAĞLANTIYI KUR
     sp = spotify_manager.baglanti_kur(token_info)
 
 # =========================================================
-# ANA UYGULAMA (Giriş Yapıldıysa Burası Çalışır)
+# GENİŞLETİLMİŞ VE MODERNİZE EDİLMİŞ TÜR LİSTESİ
 # =========================================================
-
 ALT_TURLER = {
-    "neseli_pop": ["Türkçe Pop", "Dance Pop", "Serdar Ortaç Pop", "90'lar Türkçe Pop", "Disco"],
-    "huzunlu_slow": ["Akustik", "Türkü", "Arabesk", "Damar", "Indie Slow", "Piyano Ballad"],
-    "enerjik_spor": ["Türkçe Rap", "Techno", "Drill", "Fitness", "Remix"],
-    "sakin_akustik": ["Türk Sanat Müziği", "Enstrümantal", "Lo-Fi", "Sufi/Ney", "Akustik Cover"],
-    "indie_alternatif": ["Anadolu Rock", "Alternatif Rock", "Indie Folk", "Soft Rock"],
-    "hard_rock_metal": ["Türkçe Rock", "Heavy Metal", "Hard Rock", "Metal"],
-    "rap_hiphop": ["Arabesk Rap", "Old School", "Melodic Rap", "Drill", "Trap"],
-    "jazz_blues": ["Türkçe Caz", "Blues", "Soul", "Vocal Jazz"],
-    "elektronik_synth": ["Synthwave", "Deep House", "Techno"]
+    "neseli_pop": [
+        "Türkçe Pop Hareketli", "Yaz Hitleri", "Dance Pop", "Road Trip", 
+        "Serdar Ortaç Pop", "90'lar Türkçe Pop", "Disco", "K-Pop", "Reggaeton"
+    ],
+    "huzunlu_slow": [
+        "Akustik Hüzün", "Melankolik Indie", "Slow Pop", "Piyano & Yağmur", 
+        "Türkçe Damar", "Alternatif Balad", "Türkü", "Arabesk", "Kırık Kalpler"
+    ],
+    "enerjik_spor": [
+        "Spor Motivasyon", "Türkçe Rap", "Phonk", "Drill", "Techno", 
+        "House", "Gym Hits", "Remix", "Power Workout"
+    ],
+    "sakin_akustik": [
+        "Lo-Fi Beats", "Chill Pop", "Akustik Cover", "Jazz Vibes", 
+        "Enstrümantal", "Kitap Okuma", "Kahve Modu", "Ambient", "Soft Rock", "Sufi/Ney"
+    ],
+    "indie_alternatif": [
+        "Alternatif Rock", "Yeni Nesil Indie", "Anadolu Rock", "Shoegaze", 
+        "Soft Indie", "Bağımsız Müzik", "Dream Pop"
+    ],
+    "hard_rock_metal": [
+        "Türkçe Rock", "Anadolu Rock", "Heavy Metal", "Nu-Metal", 
+        "Hard Rock", "Punk", "Garage Rock"
+    ],
+    "rap_hiphop": [
+        "Türkçe Rap", "Old School", "Melodic Rap", "Trap", 
+        "Arabesk Rap", "Drill", "Underground"
+    ],
+    "jazz_blues": [
+        "Smooth Jazz", "Gece Mavisi", "Blues Rock", "Soul", 
+        "Vocal Jazz", "Türkçe Caz", "Coffee Table Jazz"
+    ],
+    "elektronik_synth": [
+        "Synthwave", "Cyberpunk", "Deep House", "Minimal Techno", 
+        "EDM", "Daft Punk Vibe"
+    ]
 }
 
+# --- AKILLI VARSAYILAN SEÇİCİ ---
+def akilli_tur_oner(text, tur_listesi):
+    text = text.lower()
+    oneriler = []
+    
+    # Anahtar kelime eşleştirmeleri (GÜNCELLENDİ)
+    mappings = {
+        "lo-fi": ["chill", "sakin", "ders", "odak", "lofi"],
+        "jazz vibes": ["kahve", "yağmur", "akşam", "şık"],
+        # DÜZELTME: "yürüyüş" kelimesini Spordan çıkardık
+        "spor motivasyon": ["koşu", "spor", "hız", "bas", "antrenman", "gym"], 
+        # DÜZELTME: "yürüyüş" artık Akustik ve Chill modda
+        "akustik cover": ["doğa", "yürüyüş", "manzara", "hafif", "gezi", "sahil"], 
+        "chill pop": ["cadde", "şehir", "gezinti", "alışveriş", "mood", "yürüyorum"],
+        "türkü": ["türkü", "bağlama", "halk", "köy"],
+        "arabesk": ["damar", "baba", "dert", "efkar"],
+        "türkçe rap": ["sokak", "mahalle", "hız", "ritim"]
+    }
+    
+    for tur, keywords in mappings.items():
+        # Tür listesinde bu tür var mı kontrol et (Büyük/küçük harf duyarsız)
+        mevcut_tur = next((t for t in tur_listesi if t.lower() == tur.lower()), None)
+        if mevcut_tur:
+            for kw in keywords:
+                if kw in text:
+                    oneriler.append(mevcut_tur)
+                    break
+    
+    if not oneriler:
+        return tur_listesi[:2]
+    
+    return list(set(oneriler))[:3]
+
+
+# --- ANA SAYFA ---
 st.title("🧠 Mood AI: Yapay Zeka Terapisti")
 if st.button("Çıkış Yap"):
     st.session_state['token_info'] = None
@@ -74,7 +130,7 @@ col1, col2 = st.columns([1, 1.5])
 
 with col1:
     st.subheader("1. Terapi Seansı")
-    user_input = st.text_area("Ne hissediyorsunuz?", height=150, placeholder="Kahvemi aldım, hafif hüzünlü bir türkü dinlemek istiyorum...")
+    user_input = st.text_area("Ne hissediyorsunuz?", height=150, placeholder="Cadde de yürüyorum, hava serin ve chill bir moddayım...")
     
     dil = st.radio("Dil Tercihi:", ["Karışık", "Sadece Türkçe", "Sadece Yabancı"], horizontal=True)
     dil_kod = "mix"
@@ -85,7 +141,10 @@ with col1:
         if user_input:
             with st.spinner("Nöral ağlar analiz ediyor..."):
                 mod, yorum = ai_psychologist.derin_analiz(user_input)
-                if mod not in ALT_TURLER: mod = "sakin_akustik"
+                
+                if mod not in ALT_TURLER:
+                    mod = "sakin_akustik"
+
                 st.session_state['mod'] = mod
                 st.session_state['yorum'] = yorum
                 st.session_state['analiz_yapildi'] = True
@@ -95,17 +154,23 @@ with col1:
     if st.session_state.get('analiz_yapildi'):
         st.divider()
         st.subheader("2. Reçete Detayları")
+        
         mod = st.session_state['mod']
         st.info(f"**Teşhis:** {mod.replace('_', ' ').title()}")
         
+        # Seçenekleri getir
         uygun_turler = ALT_TURLER.get(mod, ALT_TURLER["sakin_akustik"])
-        varsayilan = uygun_turler[:2]
-        if user_input and "türkü" in user_input.lower() and "Türkü" in uygun_turler:
-            varsayilan = ["Türkü"]
-            
-        secilen_turler = st.multiselect("Türleri seçin:", options=uygun_turler, default=varsayilan)
         
-        if st.button("Listeyi Oluştur 🎵", type="primary", use_container_width=True):
+        # Akıllı seçim yap
+        varsayilan_secim = akilli_tur_oner(user_input, uygun_turler)
+            
+        secilen_turler = st.multiselect(
+            "Hangi türleri ekleyelim?", 
+            options=uygun_turler,
+            default=varsayilan_secim
+        )
+        
+        if st.button("Tedavi Listesini Oluştur 🎵", type="primary", use_container_width=True):
             st.session_state['secilen_turler'] = secilen_turler
             st.session_state['sarkilari_goster'] = True
             st.session_state['offset'] = 0
@@ -121,7 +186,7 @@ with col2:
         yorum = st.session_state.get('yorum', "")
         
         if "(Çevrimdışı Mod)" in yorum:
-            st.warning(f"**🩺 Doktor Notu (Yedek):**\n{yorum}")
+            st.warning(f"**🩺 Doktor Notu (Yedek Sistem):**\n{yorum}")
         else:
             st.success(f"**🩺 Doktor Notu (AI):**\n{yorum}")
             

@@ -18,24 +18,21 @@ def get_secret(key_name):
 
 SPOTIFY_CLIENT_ID = get_secret("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = get_secret("SPOTIFY_CLIENT_SECRET")
-# Cloud'daki Redirect URI (Sonu /callback ile bitmeli)
 REDIRECT_URI = get_secret("REDIRECT_URI")
 if not REDIRECT_URI:
     REDIRECT_URI = 'http://127.0.0.1:8080/callback'
 
 SCOPE = "playlist-modify-public playlist-modify-private"
 
-# --- OAUTH NESNESİ OLUŞTURUCU ---
 def create_spotify_oauth():
     return SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=REDIRECT_URI,
         scope=SCOPE,
-        cache_handler=spotipy.cache_handler.MemoryCacheHandler() # Cloud için RAM'de tut
+        cache_handler=spotipy.cache_handler.MemoryCacheHandler()
     )
 
-# --- BAĞLANTI KURMA (TOKEN VARSA) ---
 def baglanti_kur(token_info=None):
     if not token_info:
         return None
@@ -50,6 +47,8 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     if not secilen_turler: secilen_turler = ["Pop"]
 
     all_tracks = []
+    # DÜZELTME 1: Eklenen şarkıların ID'lerini hafızada tutmak için küme (set) oluşturuyoruz
+    eklenen_sarkilar_ids = set()
     
     en_keywords = {
         "neseli_pop": "happy upbeat", "huzunlu_slow": "sad emotional",
@@ -70,7 +69,7 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     base_mood_tr = tr_keywords.get(mood_kategorisi, "pop")
 
     for tur in secilen_turler:
-        is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz"] # Kısaltıldı
+        is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz"]
         
         if dil_secenegi == 'tr': query = f"Türkçe {base_mood_tr} {tur}"
         elif dil_secenegi == 'yabanci': query = f"{base_mood_en} {tur}"
@@ -80,6 +79,14 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
             results = sp.search(q=query, limit=5, offset=offset_random, type='track', market='TR')
             if results and 'tracks' in results:
                 for item in results['tracks']['items']:
+                    # DÜZELTME 2: Eğer bu şarkı zaten listede varsa atla
+                    track_id = item['id']
+                    if track_id in eklenen_sarkilar_ids:
+                        continue
+                    
+                    # Yeni şarkıysa listeye ve hafızaya ekle
+                    eklenen_sarkilar_ids.add(track_id)
+                    
                     img = item['album']['images'][0]['url'] if item['album']['images'] else None
                     track = {
                         'uri': item['uri'], 'name': item['name'],
