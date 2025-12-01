@@ -50,10 +50,11 @@ else:
 # =========================================================
 # ANA UYGULAMA
 # =========================================================
+# GÜNCELLEME: Tür isimleri spotify_manager.py ile %100 uyumlu hale getirildi
 ALT_TURLER = {
     "neseli_pop": ["Türkçe Pop Hareketli", "Yaz Hitleri", "Dance Pop", "Road Trip", "Serdar Ortaç Pop", "90'lar Türkçe Pop", "Disco", "K-Pop", "Reggaeton"],
     "huzunlu_slow": ["Akustik Hüzün", "Melankolik Indie", "Slow Pop", "Piyano & Yağmur", "Türkçe Damar", "Alternatif Balad", "Türkü", "Arabesk", "Kırık Kalpler"],
-    "enerjik_spor": ["Spor Motivasyon", "Türkçe Rap", "Phonk", "Drill", "Techno", "House", "Gym Hits", "Remix", "Power Workout"],
+    "enerjik_spor": ["Spor Motivasyon", "Türkçe Rap", "Phonk", "Drill", "Techno", "House", "Gym Hits", "Power Workout", "Remix"],
     "sakin_akustik": ["Lo-Fi Beats", "Chill Pop", "Akustik Cover", "Jazz Vibes", "Enstrümantal", "Kitap Okuma", "Kahve Modu", "Ambient", "Soft Rock", "Sufi/Ney"],
     "indie_alternatif": ["Alternatif Rock", "Yeni Nesil Indie", "Anadolu Rock", "Shoegaze", "Soft Indie", "Bağımsız Müzik", "Dream Pop"],
     "hard_rock_metal": ["Türkçe Rock", "Anadolu Rock", "Heavy Metal", "Nu-Metal", "Hard Rock", "Punk", "Garage Rock"],
@@ -65,15 +66,16 @@ ALT_TURLER = {
 def akilli_tur_oner(text, tur_listesi):
     text = text.lower()
     oneriler = []
+    # GÜNCELLEME: "Yürüyorum", "Cadde" gibi kelimeler doğru türlere yönlendirildi
     mappings = {
         "lo-fi": ["chill", "sakin", "ders", "odak", "lofi"],
         "jazz vibes": ["kahve", "yağmur", "akşam", "şık"],
         "spor motivasyon": ["koşu", "spor", "hız", "bas", "antrenman", "gym"], 
-        "akustik cover": ["doğa", "yürüyüş", "manzara", "hafif", "gezi", "sahil"], 
-        "chill pop": ["cadde", "şehir", "gezinti", "alışveriş", "mood", "yürüyorum"],
-        "türkü": ["türkü", "bağlama", "halk", "köy"],
-        "arabesk": ["damar", "baba", "dert", "efkar"],
-        "türkçe rap": ["sokak", "mahalle", "hız", "ritim"]
+        "akustik cover": ["doğa", "yürüyüş", "manzara", "hafif", "gezi", "sahil", "yürüyorum"], 
+        "chill pop": ["cadde", "şehir", "gezinti", "alışveriş", "mood", "yürüyorum", "kafa dinleme"],
+        "türkü": ["türkü", "bağlama", "halk", "köy", "toprak"],
+        "arabesk": ["damar", "baba", "dert", "efkar", "içelim"],
+        "türkçe rap": ["sokak", "mahalle", "hız", "ritim", "araba"]
     }
     for tur, keywords in mappings.items():
         mevcut_tur = next((t for t in tur_listesi if t.lower() == tur.lower()), None)
@@ -165,9 +167,10 @@ with col2:
         if tracks:
             st.subheader(f"💊 Müzik Reçetesi ({len(tracks)} Şarkı)")
             
+            # Playlist kaydı için URI listesini önceden hazırla (Verim artışı)
+            track_uris = [tr['uri'] for tr in tracks]
+            
             for i, t in enumerate(tracks):
-                track_uris = [tr['uri'] for tr in tracks] # Playlist için toplu
-                
                 c1, c2, c3 = st.columns([1, 4, 1])
                 with c1:
                     if t['image']: st.image(t['image'], use_container_width=True)
