@@ -38,7 +38,7 @@ Projeyi yerel makinenizde çalıştırmak için aşağıdaki adımları izleyebi
 
 Repoyu Klonlayın:
 
-git clone [https://github.com/KULLANICI_ADINIZ/MoodAI.git](https://github.com/KULLANICI_ADINIZ/MoodAI.git)
+git clone [https://github.com/enesic/MoodAI.git](https://github.com/enesic/MoodAI.git)
 cd MoodAI
 
 
