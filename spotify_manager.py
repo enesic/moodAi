@@ -6,35 +6,44 @@ import math
 import streamlit as st
 from dotenv import load_dotenv
 
+# Local ortam için .env yükle (Cloud'da pas geçer)
 try:
     load_dotenv()
 except:
     pass
 
-# --- ŞİFRE OKUMA ---
+# --- GÜVENLİ ŞİFRE OKUYUCU ---
 def get_secret(key_name):
+    # Önce Streamlit Cloud Secrets'a bak
     if key_name in st.secrets:
         return st.secrets[key_name]
+    # Yoksa yerel .env dosyasına bak
     return os.getenv(key_name)
 
+# Ayarları Güvenli Şekilde Al
 SPOTIFY_CLIENT_ID = get_secret("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = get_secret("SPOTIFY_CLIENT_SECRET")
 REDIRECT_URI = get_secret("REDIRECT_URI")
+
+# Eğer Redirect URI yoksa varsayılan local adresi kullan
 if not REDIRECT_URI:
     REDIRECT_URI = 'http://127.0.0.1:8080/callback'
 
 SCOPE = "playlist-modify-public playlist-modify-private"
 
 def create_spotify_oauth():
+    """Yetkilendirme nesnesini oluşturur."""
     return SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
         client_secret=SPOTIFY_CLIENT_SECRET,
         redirect_uri=REDIRECT_URI,
         scope=SCOPE,
-        cache_handler=spotipy.cache_handler.MemoryCacheHandler()
+        cache_handler=spotipy.cache_handler.MemoryCacheHandler(), # Token'ı dosyaya yazmaz, RAM'de tutar (Güvenli)
+        open_browser=False # Sunucuda tarayıcı açmaya çalışmasını engeller
     )
 
 def baglanti_kur(token_info=None):
+    """Token ile Spotify bağlantısını kurar."""
     if not token_info:
         return None
     try:
@@ -44,6 +53,7 @@ def baglanti_kur(token_info=None):
         return None
 
 def _create_track_obj(item):
+    """Spotify verisinden temiz şarkı objesi oluşturur."""
     img = item['album']['images'][0]['url'] if item['album']['images'] else None
     return {
         'id': item['id'],
@@ -56,8 +66,10 @@ def _create_track_obj(item):
         'link': item['external_urls']['spotify']
     }
 
-# GÜNCELLEME: enerji_seviyesi parametresi eklendi
 def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mix', secilen_turler=None, sarki_sayisi=10, enerji_seviyesi="Orta"):
+    """
+    Kullanıcı kriterlerine göre gelişmiş şarkı araması yapar.
+    """
     if not sp: return []
     if not secilen_turler: secilen_turler = ["Pop"]
 
@@ -65,10 +77,11 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     eklenen_sarkilar_unique_keys = set()
     sanatci_sayaci = {} 
 
+    # Her türden ne kadar alınacağını hesapla
     limit_per_genre = math.ceil(sarki_sayisi / len(secilen_turler)) + 3
     search_limit = min(50, limit_per_genre + 5) 
 
-    # --- ENERJİ AYARLARI ---
+    # --- ENERJİ FİLTRELERİ ---
     enerji_suffix_tr = ""
     enerji_suffix_en = ""
     
@@ -76,9 +89,10 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
         enerji_suffix_tr = " sakin yavaş soft akustik"
         enerji_suffix_en = " slow calm acoustic soft"
     elif enerji_seviyesi == "Yüksek":
-        enerji_suffix_tr = " hareketli hızlı tempo kopmalık"
-        enerji_suffix_en = " upbeat high tempo party energy"
+        enerji_suffix_tr = " hareketli hızlı tempo enerji"
+        enerji_suffix_en = " upbeat high tempo energy party"
 
+    # Yedek mood kelimeleri
     base_mood_tr = {
         "neseli_pop": "neşeli", "huzunlu_slow": "duygusal", "enerjik_spor": "spor",
         "sakin_akustik": "sakin", "indie_alternatif": "alternatif", "hard_rock_metal": "rock",
@@ -86,35 +100,35 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     }.get(mood_kategorisi, "pop")
 
     for tur in secilen_turler:
+        # Resmi tür kontrolü
         is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz", "classical", "metal", "piano", "reggae", "blues", "folk", "disco", "hip-hop"]
         
-        # Sorgu Oluşturma (Enerji kelimelerini ekleyerek)
+        # Sorgu Oluşturma
         query = ""
         if dil_secenegi == 'tr':
-            query = f"{tur} {enerji_suffix_tr}"
-            # Eğer zaten içinde 'türkçe' yoksa ekle
-            if "türkçe" not in query.lower() and "turkish" not in query.lower():
-                query = f"Türkçe {query}"
+            # Zaten Türkçe bir türse (Örn: Türkçe Pop) ekleme yapma, değilse 'Türkçe' ekle
+            base_query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
+            query = f"{base_query}{enerji_suffix_tr}"
                 
         elif dil_secenegi == 'yabanci':
-            # Yabancıysa ve resmi türse genre: kullan, değilse düz arama
-            # Enerji ekini sona ekle
             if is_official:
-                query = f"genre:{tur} {enerji_suffix_en}"
+                query = f"genre:{tur}{enerji_suffix_en}"
             else:
-                query = f"{tur} {enerji_suffix_en}"
+                query = f"{tur}{enerji_suffix_en}"
                 
         else: # mix
             if random.choice([True, False]):
-                query = f"Türkçe {tur} {enerji_suffix_tr}"
+                base_query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
+                query = f"{base_query}{enerji_suffix_tr}"
             else:
-                query = f"{tur} {enerji_suffix_en}"
+                query = f"{tur}{enerji_suffix_en}"
 
         try:
+            # Rastgelelik
             genre_offset = offset_random + random.randint(0, 50)
             results = sp.search(q=query, limit=search_limit, offset=genre_offset, type='track', market='TR')
             
-            # Sonuç yoksa yedeğe geç (Enerji ekini kaldırıp dene)
+            # Sonuç yoksa yedeğe geç (Enerji ekini kaldır, daha genel ara)
             if (not results or not results['tracks']['items']):
                  query_backup = f"{base_mood_tr} {tur}" if dil_secenegi == 'tr' else f"{tur}"
                  results = sp.search(q=query_backup, limit=search_limit, offset=0, type='track', market='TR')
@@ -127,9 +141,10 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
                     artist_name = item['artists'][0]['name']
                     track_name = item['name']
                     
+                    # Çeşitlilik Kontrolleri
                     unique_key = f"{track_name} - {artist_name}".lower()
                     if unique_key in eklenen_sarkilar_unique_keys: continue
-                    if sanatci_sayaci.get(artist_name, 0) >= 2: continue
+                    if sanatci_sayaci.get(artist_name, 0) >= 2: continue # Aynı sanatçıdan max 2 şarkı
 
                     eklenen_sarkilar_unique_keys.add(unique_key)
                     sanatci_sayaci[artist_name] = sanatci_sayaci.get(artist_name, 0) + 1
@@ -144,6 +159,7 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     return all_tracks[:sarki_sayisi]
 
 def tek_sarki_getir(sp, mood_kategorisi, exclude_ids=[], dil_secenegi='mix', secilen_turler=None):
+    """Tekil şarkı değişimi için yeni şarkı bulur."""
     if not sp: return None
     if not secilen_turler: secilen_turler = ["Pop"]
     
