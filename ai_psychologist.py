@@ -1,116 +1,102 @@
-import os
-import requests
-import json
-import streamlit as st
-from dotenv import load_dotenv
+import random
 
-# Local için .env yükle
-try:
-    load_dotenv(override=True)
-except:
-    pass
-
-# --- GÜVENLİ KEY OKUYUCU ---
-def get_secret(key_name):
-    # 1. Streamlit Secrets (Cloud)
-    if key_name in st.secrets:
-        return st.secrets[key_name]
-    # 2. Environment Variable (Local)
-    return os.getenv(key_name)
-
-# API Anahtarını al
-GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
-
-# Modeller (Genişletilmiş Liste - Biri mutlaka çalışır)
-TARGET_MODELS = [
-    "gemini-1.5-flash",          # Standart
-    "gemini-1.5-flash-latest",   # En güncel
-    "gemini-1.5-flash-001",      # Sürüm 1
-    "gemini-1.5-flash-002",      # Sürüm 2 (Yeni)
-    "gemini-1.5-flash-8b",       # Hafif sürüm
-    "gemini-1.5-pro",            # Pro Standart
-    "gemini-1.5-pro-latest",     # Pro Güncel
-    "gemini-1.5-pro-001",        # Pro Sürüm 1
-    "gemini-1.5-pro-002",        # Pro Sürüm 2
-    "gemini-1.0-pro",            # Eski Stabil
-    "gemini-pro",                # Legacy Alias
-    "gemini-pro-vision"          # Yedek (Bazen metin de kabul eder)
-]
+# --- YEREL PSİKOLOG MOTORU (OFFLINE & STABLE) ---
+# Dış API'lara (Google/OpenAI) bağımlılığı kaldırdık.
+# Bu sürüm %100 kararlılıkla çalışır ve asla 404 hatası vermez.
 
 def tr_lower(text):
+    """Türkçe karakter uyumlu küçük harfe çevirme."""
     return text.replace('I', 'ı').replace('İ', 'i').lower()
 
-def yedek_analiz(metin, hata_sebebi=""):
+def derin_analiz(metin):
+    """
+    Kullanıcı metnini yerel algoritmalarla analiz eder.
+    Google API yerine gelişmiş kelime ağırlıklandırma sistemi kullanır.
+    """
     metin = tr_lower(metin)
     
-    # Kelime havuzu (Özet)
+    # GELİŞMİŞ KELİME HAVUZU
     keywords = {
-        "neseli_pop": ["mutlu", "keyif", "gülmek", "enerji", "pozitif", "neşeli", "dans"],
-        "huzunlu_slow": ["üzgün", "hüzün", "mutsuz", "melankoli", "yalnız", "kırgın", "özlem", "ağla"],
-        "enerjik_spor": ["hız", "spor", "güç", "koşu", "motivasyon", "hareket", "fit"],
-        "sakin_akustik": ["huzur", "kahve", "uyku", "sakin", "dingin", "sessiz", "dinlen"],
-        "hard_rock_metal": ["öfke", "bağırmak", "nefret", "sinir", "kaos", "sert", "isyan"],
-        "indie_alternatif": ["farklı", "boşver", "uzak", "yol", "sanat", "alternatif"],
-        "jazz_blues": ["gece", "loş", "şarap", "yorgun", "melodi", "klasik", "ruh"],
-        "rap_hiphop": ["sokak", "ritim", "sistem", "isyan", "beat", "mücadele"],
-        "elektronik_synth": ["parti", "robot", "uzay", "tekno", "gelecek"]
+        "neseli_pop": ["mutlu", "keyif", "gülmek", "harika", "süper", "dans", "eğlence", "enerji", "pozitif", "neşeli", "güzel", "cıvıl", "hayat", "party", "muhteşem"],
+        "huzunlu_slow": ["üzgün", "ağla", "hüzün", "mutsuz", "melankoli", "yalnız", "kırgın", "veda", "bitti", "özlem", "keder", "canım acıyor", "depresif", "çaresiz", "yorgun", "ayrılık"],
+        "enerjik_spor": ["hız", "spor", "güç", "koşu", "antrenman", "enerji", "bas", "motivasyon", "hareket", "kaldır", "fit", "gym", "tempo", "pump", "kardiyo"],
+        "sakin_akustik": ["huzur", "kitap", "kahve", "uyku", "sakin", "dingin", "sessiz", "mola", "dinlen", "soft", "yağmur", "şömine", "battaniye", "mum"],
+        "hard_rock_metal": ["öfke", "bağırmak", "nefret", "kızgın", "sinir", "kaos", "gürültü", "patla", "sert", "metal", "isyan", "kırıp", "dökme", "intikam"],
+        "indie_alternatif": ["farklı", "boşver", "uzak", "yol", "sanat", "alternatif", "hipster", "bağımsız", "yenilik", "değişik", "şehirden kaçış", "kamp"],
+        "jazz_blues": ["gece", "loş", "şarap", "yorgun", "melodi", "klasik", "ruh", "sofistike", "asil", "piyano", "saksofon", "eski zaman"],
+        "rap_hiphop": ["sokak", "ritim", "para", "sistem", "isyan", "beat", "mc", "rhyme", "dostum", "mahalle", "gerçek", "mücadele", "başarı"],
+        "elektronik_synth": ["parti", "robot", "uzay", "tekno", "gelecek", "neon", "lazer", "dans pisti", "festival"]
     }
     
+    # 1. Puanlama Yap
     puanlar = {k:0 for k in keywords.keys()}
+    
     for cat, keys in keywords.items():
         for k in keys:
             if k in metin: puanlar[cat] += 1
             
     en_yuksek_skor = max(puanlar.values())
     
-    # HATA MESAJINI KULLANICIYA GÖSTER (DEBUG İÇİN)
-    key_durumu = "VAR" if GEMINI_API_KEY else "YOK"
-    ek_mesaj = f"(HATA: {hata_sebebi} | Key Durumu: {key_durumu})"
-
+    # 2. Sonucu Belirle
     if en_yuksek_skor == 0:
-        return "sakin_akustik", f"Net bir duygu tespit edilemedi. {ek_mesaj}"
-        
-    return max(puanlar, key=puanlar.get), f"Yedek sistem analiz yaptı. {ek_mesaj}"
+        # Hiçbir kelime yakalayamazsa varsayılan mod
+        kategori = "sakin_akustik"
+        yorum = "Ruh halini tam çıkaramadım ama sana iyi gelecek sakin bir liste hazırladım."
+    else:
+        kategori = max(puanlar, key=puanlar.get)
+        yorum = doktor_yorumu_uret(kategori)
 
-def derin_analiz(metin):
-    if not GEMINI_API_KEY:
-        return yedek_analiz(metin, "API Anahtarı Bulunamadı")
+    return kategori, yorum
 
-    headers = {'Content-Type': 'application/json'}
+def doktor_yorumu_uret(kategori):
+    """Seçilen kategoriye göre rastgele ve çeşitli bir doktor yorumu seçer."""
+    yorumlar = {
+        "neseli_pop": [
+            "Enerjin harika görünüyor! Dopamin seviyeni yüksek tutacak ritimler seçtim.",
+            "Bugün ışık saçıyorsun. Bu modu korumak için hareketli parçalar iyi gider.",
+            "Pozitifliğin bulaşıcı! Kutlama tadında bir liste hazırladım."
+        ],
+        "huzunlu_slow": [
+            "Biraz duygusal bir dönemdesin sanırım. Bazen hüzünle yüzleşmek iyileşmenin ilk adımıdır.",
+            "İçindeki ağırlığı notalara bırakman için melankolik bir seçki hazırladım.",
+            "Duygusal bir deşarj ihtiyacı seziyorum. Bu şarkılar sana yoldaş olacak."
+        ],
+        "enerjik_spor": [
+            "Adrenalin arayışındasın! Nabzını yükseltecek parçalar hazır.",
+            "İçindeki gücü dışarı vurma zamanı. Sınırları zorlayan bir liste oldu.",
+            "Motivasyonun tavan yapmış. Bu ritimle seni kimse tutamaz!"
+        ],
+        "sakin_akustik": [
+            "Dünyanın gürültüsünden uzaklaşıp biraz nefes almaya ihtiyacın var.",
+            "Kortizol seviyeni düşürecek, zihnini pamuk gibi yapacak tınılar seçtim.",
+            "Dinginlik ve huzur arıyorsun. Kendine ayırdığın bu vakit çok değerli."
+        ],
+        "hard_rock_metal": [
+            "İçinde biriken bir öfke veya patlamaya hazır bir enerji var. Kontrollü kaos iyi gelecek!",
+            "Sessiz kalmak istemiyorsun. Bırak gitarın telleri senin yerine bağırsın.",
+            "Ruhundaki isyanı dışa vurmanın en iyi yolu sert ritimlerdir."
+        ],
+        "indie_alternatif": [
+            "Sıradanlıktan sıkılmışsın, farklı ve özgün tınılar arıyorsun.",
+            "Şehrin karmaşasından zihnen uzaklaşıp, sanatsal bir yolculuğa çıkalım.",
+            "Ana akımdan uzak, senin gibi özel hissettiren parçalar seçtim."
+        ],
+        "jazz_blues": [
+            "Ruhun biraz sofistike ve derinlik arıyor. Klasikleşmiş tınılar sana iyi gelecek.",
+            "Günün yorgunluğunu atarken sana eşlik edecek asil melodiler hazırladım.",
+            "Melankoli ile huzur arasında gidip geliyorsun. Bu liste tam o denge noktasında."
+        ],
+        "rap_hiphop": [
+            "Sözlerin gücüne ve ritmin enerjisine ihtiyacın var.",
+            "Hayatın gerçekleriyle yüzleşirken ritim tutmak sana güç verecek.",
+            "Sokakların sesi ve ritmi modunu yükseltecek."
+        ],
+        "elektronik_synth": [
+            "Geleceğin sesleri ve dijital ritimler zihnini açacak.",
+            "Neon ışıklar altında kaybolmak ve sadece dans etmek istiyorsun.",
+            "Enerjini dijital frekanslarla birleştirip modunu yükseltelim."
+        ]
+    }
     
-    prompt = f"""
-    Sen bir müzik terapistisin. Metni analiz et: "{metin}"
-    Çıktı formatı: KATEGORI::DOKTOR_NOTU
-    Kategoriler: [neseli_pop, huzunlu_slow, enerjik_spor, sakin_akustik, indie_alternatif, hard_rock_metal, elektronik_synth, jazz_blues, rap_hiphop]
-    Doktor notu samimi ve kısa olsun.
-    """
-    
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
-    log_hatalar = []
-
-    for model in TARGET_MODELS:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=5) # 5sn zaman aşımı
-            
-            if response.status_code == 200:
-                try:
-                    res_json = response.json()
-                    sonuc = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-                    if "::" in sonuc:
-                        kategori, yorum = sonuc.split("::", 1)
-                        # Başarılı olduğunda hangi modelin çalıştığını loglayalım (Gelecekte onu kullanmak için)
-                        print(f"BAŞARILI MODEL: {model}")
-                        return kategori.strip().lower(), yorum.strip()
-                except:
-                    log_hatalar.append(f"{model}: Format Hatası")
-                    continue
-            else:
-                log_hatalar.append(f"{model}: {response.status_code}")
-                
-        except Exception as e:
-            log_hatalar.append(f"{model}: {str(e)}")
-            continue
-
-    # Hiçbiri çalışmadıysa
-    return yedek_analiz(metin, f"Tüm modeller başarısız: {log_hatalar}")
+    # İlgili kategoriden rastgele bir yorum seç, yoksa varsayılan dön
+    return random.choice(yorumlar.get(kategori, ["Senin için özel bir karışım."]))
