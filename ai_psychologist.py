@@ -21,12 +21,20 @@ def get_secret(key_name):
 # API Anahtarını al
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 
-# Modeller (En garantiden riskliye doğru)
+# Modeller (Genişletilmiş Liste - Biri mutlaka çalışır)
 TARGET_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-1.0-pro",
-    "gemini-pro"
+    "gemini-1.5-flash",          # Standart
+    "gemini-1.5-flash-latest",   # En güncel
+    "gemini-1.5-flash-001",      # Sürüm 1
+    "gemini-1.5-flash-002",      # Sürüm 2 (Yeni)
+    "gemini-1.5-flash-8b",       # Hafif sürüm
+    "gemini-1.5-pro",            # Pro Standart
+    "gemini-1.5-pro-latest",     # Pro Güncel
+    "gemini-1.5-pro-001",        # Pro Sürüm 1
+    "gemini-1.5-pro-002",        # Pro Sürüm 2
+    "gemini-1.0-pro",            # Eski Stabil
+    "gemini-pro",                # Legacy Alias
+    "gemini-pro-vision"          # Yedek (Bazen metin de kabul eder)
 ]
 
 def tr_lower(text):
@@ -83,7 +91,7 @@ def derin_analiz(metin):
     for model in TARGET_MODELS:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
-            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=5) # 5sn zaman aşımı
             
             if response.status_code == 200:
                 try:
@@ -91,6 +99,8 @@ def derin_analiz(metin):
                     sonuc = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
                     if "::" in sonuc:
                         kategori, yorum = sonuc.split("::", 1)
+                        # Başarılı olduğunda hangi modelin çalıştığını loglayalım (Gelecekte onu kullanmak için)
+                        print(f"BAŞARILI MODEL: {model}")
                         return kategori.strip().lower(), yorum.strip()
                 except:
                     log_hatalar.append(f"{model}: Format Hatası")
