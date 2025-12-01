@@ -43,7 +43,6 @@ def baglanti_kur(token_info=None):
         print(f"Bağlantı Hatası: {e}")
         return None
 
-# YARDIMCI FONKSİYON: Şarkı nesnesi oluşturur
 def _create_track_obj(item):
     img = item['album']['images'][0]['url'] if item['album']['images'] else None
     return {
@@ -57,59 +56,68 @@ def _create_track_obj(item):
         'link': item['external_urls']['spotify']
     }
 
-def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mix', secilen_turler=None, sarki_sayisi=10):
-    """
-    Belirlenen kriterlere göre şarkı havuzu oluşturur.
-    sarki_sayisi: Kullanıcının slider ile seçtiği sayı (10-50)
-    """
+# GÜNCELLEME: enerji_seviyesi parametresi eklendi
+def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mix', secilen_turler=None, sarki_sayisi=10, enerji_seviyesi="Orta"):
     if not sp: return []
     if not secilen_turler: secilen_turler = ["Pop"]
 
     all_tracks = []
-    
-    # Gelişmiş Filtreleme Hafızası
-    eklenen_sarkilar_unique_keys = set() # İsim + Sanatçı (Aynı şarkının farklı versiyonlarını engeller)
-    sanatci_sayaci = {} # Hangi sanatçıdan kaç tane aldık?
+    eklenen_sarkilar_unique_keys = set()
+    sanatci_sayaci = {} 
 
-    # Her türden kaçar tane alacağını hesapla (+3 esneklik payı)
     limit_per_genre = math.ceil(sarki_sayisi / len(secilen_turler)) + 3
     search_limit = min(50, limit_per_genre + 5) 
 
-    # Dil Ayarları
-    tr_keywords = {
-        "neseli_pop": "hareketli neşeli", "huzunlu_slow": "duygusal damar",
-        "enerjik_spor": "motivasyon spor", "sakin_akustik": "sakin huzurlu",
-        "indie_alternatif": "alternatif", "hard_rock_metal": "anadolu rock",
-        "elektronik_synth": "elektronik", "jazz_blues": "caz blues",
-        "rap_hiphop": "türkçe rap"
-    }
+    # --- ENERJİ AYARLARI ---
+    enerji_suffix_tr = ""
+    enerji_suffix_en = ""
     
-    base_mood_tr = tr_keywords.get(mood_kategorisi, "pop")
+    if enerji_seviyesi == "Düşük":
+        enerji_suffix_tr = " sakin yavaş soft akustik"
+        enerji_suffix_en = " slow calm acoustic soft"
+    elif enerji_seviyesi == "Yüksek":
+        enerji_suffix_tr = " hareketli hızlı tempo kopmalık"
+        enerji_suffix_en = " upbeat high tempo party energy"
+
+    base_mood_tr = {
+        "neseli_pop": "neşeli", "huzunlu_slow": "duygusal", "enerjik_spor": "spor",
+        "sakin_akustik": "sakin", "indie_alternatif": "alternatif", "hard_rock_metal": "rock",
+        "elektronik_synth": "elektronik", "jazz_blues": "caz", "rap_hiphop": "rap"
+    }.get(mood_kategorisi, "pop")
 
     for tur in secilen_turler:
         is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz", "classical", "metal", "piano", "reggae", "blues", "folk", "disco", "hip-hop"]
         
-        # Sorgu Oluşturma
+        # Sorgu Oluşturma (Enerji kelimelerini ekleyerek)
         query = ""
         if dil_secenegi == 'tr':
-            query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
+            query = f"{tur} {enerji_suffix_tr}"
+            # Eğer zaten içinde 'türkçe' yoksa ekle
+            if "türkçe" not in query.lower() and "turkish" not in query.lower():
+                query = f"Türkçe {query}"
+                
         elif dil_secenegi == 'yabanci':
-            query = f"genre:{tur}" if is_official else f"{tur}"
+            # Yabancıysa ve resmi türse genre: kullan, değilse düz arama
+            # Enerji ekini sona ekle
+            if is_official:
+                query = f"genre:{tur} {enerji_suffix_en}"
+            else:
+                query = f"{tur} {enerji_suffix_en}"
+                
         else: # mix
             if random.choice([True, False]):
-                query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
+                query = f"Türkçe {tur} {enerji_suffix_tr}"
             else:
-                query = f"genre:{tur}" if is_official else f"{tur}"
+                query = f"{tur} {enerji_suffix_en}"
 
         try:
-            # Rastgelelik katmak için offset kullan
             genre_offset = offset_random + random.randint(0, 50)
             results = sp.search(q=query, limit=search_limit, offset=genre_offset, type='track', market='TR')
             
-            # Eğer Türkçe arama sonuç vermezse, global aramaya geç (Fallback)
-            if (not results or not results['tracks']['items']) and dil_secenegi == 'tr':
-                 query = f"{base_mood_tr} {tur}" 
-                 results = sp.search(q=query, limit=search_limit, offset=0, type='track', market='TR')
+            # Sonuç yoksa yedeğe geç (Enerji ekini kaldırıp dene)
+            if (not results or not results['tracks']['items']):
+                 query_backup = f"{base_mood_tr} {tur}" if dil_secenegi == 'tr' else f"{tur}"
+                 results = sp.search(q=query_backup, limit=search_limit, offset=0, type='track', market='TR')
 
             if results and 'tracks' in results:
                 count = 0
@@ -119,16 +127,10 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
                     artist_name = item['artists'][0]['name']
                     track_name = item['name']
                     
-                    # 1. KONTROL: Şarkı Daha Önce Eklendi mi? (İsim ve Sanatçı bazlı)
                     unique_key = f"{track_name} - {artist_name}".lower()
-                    if unique_key in eklenen_sarkilar_unique_keys:
-                        continue
-                    
-                    # 2. KONTROL: Sanatçı Kotası Doldu mu? (Max 2 Şarkı)
-                    if sanatci_sayaci.get(artist_name, 0) >= 2:
-                        continue
+                    if unique_key in eklenen_sarkilar_unique_keys: continue
+                    if sanatci_sayaci.get(artist_name, 0) >= 2: continue
 
-                    # Listeye Ekle
                     eklenen_sarkilar_unique_keys.add(unique_key)
                     sanatci_sayaci[artist_name] = sanatci_sayaci.get(artist_name, 0) + 1
                     
@@ -139,61 +141,28 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
             print(f"Hata ({tur}): {e}")
 
     random.shuffle(all_tracks)
-    # Kullanıcının istediği sayıya tam olarak kes (Fazlaları at)
     return all_tracks[:sarki_sayisi]
 
 def tek_sarki_getir(sp, mood_kategorisi, exclude_ids=[], dil_secenegi='mix', secilen_turler=None):
-    """
-    'Değiştir' butonu için mevcut listede olmayan YENİ bir şarkı bulur.
-    Eğer spesifik türde bulamazsa, genel moddan getirir.
-    """
     if not sp: return None
     if not secilen_turler: secilen_turler = ["Pop"]
     
     max_retries = 3
-    
     for _ in range(max_retries):
         tur = random.choice(secilen_turler)
-        is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz", "classical", "metal", "piano"]
-        
         offset = random.randint(0, 100)
         
-        query = ""
-        if dil_secenegi == 'tr':
-            query = tur if "türkçe" in tur.lower() else f"Türkçe {tur}"
-        elif dil_secenegi == 'yabanci':
-            query = f"genre:{tur}" if is_official else f"{tur}"
-        else:
-            query = f"Türkçe {tur}" if random.choice([True, False]) else f"{tur}"
+        query = f"Türkçe {tur}" if dil_secenegi == 'tr' else f"{tur}"
+        if dil_secenegi == 'mix' and random.choice([True, False]): query = f"Türkçe {tur}"
         
         try:
             results = sp.search(q=query, limit=10, offset=offset, type='track', market='TR')
             if results and 'tracks' in results:
                 for item in results['tracks']['items']:
-                    # Sadece ID kontrolü yeterli değil, isim kontrolü de yapabiliriz ama
-                    # tekli değişimde ID kontrolü genellikle yeterlidir.
                     if item['id'] not in exclude_ids:
                         return _create_track_obj(item) 
         except:
             continue
-            
-    try:
-        tr_keywords = {
-            "neseli_pop": "hareketli", "huzunlu_slow": "damar",
-            "enerjik_spor": "spor", "sakin_akustik": "sakin",
-            "indie_alternatif": "alternatif", "hard_rock_metal": "rock",
-            "elektronik_synth": "elektronik", "jazz_blues": "caz",
-            "rap_hiphop": "rap"
-        }
-        fallback_query = tr_keywords.get(mood_kategorisi, "pop")
-        results = sp.search(q=fallback_query, limit=10, offset=random.randint(0, 50), type='track', market='TR')
-        if results and 'tracks' in results:
-             for item in results['tracks']['items']:
-                if item['id'] not in exclude_ids:
-                    return _create_track_obj(item)
-    except:
-        pass
-
     return None 
 
 def playlisti_kaydet(sp, track_uris, mood_title):
