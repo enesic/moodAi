@@ -1,10 +1,10 @@
 import os
 import requests
 import json
-import streamlit as st # Streamlit eklendi
+import streamlit as st
 from dotenv import load_dotenv
 
-# Local için .env
+# Local için .env yükle
 try:
     load_dotenv(override=True)
 except:
@@ -12,22 +12,21 @@ except:
 
 # --- GÜVENLİ KEY OKUYUCU ---
 def get_secret(key_name):
+    # 1. Streamlit Secrets (Cloud)
     if key_name in st.secrets:
         return st.secrets[key_name]
+    # 2. Environment Variable (Local)
     return os.getenv(key_name)
 
 # API Anahtarını al
 GEMINI_API_KEY = get_secret("GEMINI_API_KEY")
 
-# Debug için (Streamlit loglarına yazar)
-if GEMINI_API_KEY:
-    print(f"DEBUG: API Key OK.")
-else:
-    print("DEBUG: API Key YOK.")
-
-# Modeller
+# Modeller (En garantiden riskliye doğru)
 TARGET_MODELS = [
-    "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-1.0-pro",
+    "gemini-pro"
 ]
 
 def tr_lower(text):
@@ -36,15 +35,17 @@ def tr_lower(text):
 def yedek_analiz(metin, hata_sebebi=""):
     metin = tr_lower(metin)
     
+    # Kelime havuzu (Özet)
     keywords = {
-        "neseli_pop": ["mutlu", "keyif", "gülmek", "harika", "süper", "dans", "eğlence", "enerji", "pozitif", "neşeli", "güzel"],
-        "huzunlu_slow": ["üzgün", "ağla", "hüzün", "mutsuz", "melankoli", "yalnız", "kırgın", "veda", "bitti", "özlem", "keder", "canım acıyor", "depresif"],
-        "enerjik_spor": ["hız", "spor", "güç", "koşu", "antrenman", "enerji", "bas", "motivasyon", "hareket", "kaldır", "fit"],
-        "sakin_akustik": ["huzur", "kitap", "kahve", "uyku", "sakin", "dingin", "sessiz", "mola", "dinlen", "soft"],
-        "hard_rock_metal": ["öfke", "bağırmak", "nefret", "kızgın", "sinir", "kaos", "gürültü", "patla", "sert", "metal"],
-        "indie_alternatif": ["farklı", "boşver", "uzak", "yol", "sanat", "alternatif", "hipster", "bağımsız"],
-        "jazz_blues": ["gece", "loş", "şarap", "yorgun", "melodi", "klasik", "ruh", "sofistike"],
-        "rap_hiphop": ["sokak", "ritim", "para", "sistem", "isyan", "beat", "mc", "rhyme", "dostum"]
+        "neseli_pop": ["mutlu", "keyif", "gülmek", "enerji", "pozitif", "neşeli", "dans"],
+        "huzunlu_slow": ["üzgün", "hüzün", "mutsuz", "melankoli", "yalnız", "kırgın", "özlem", "ağla"],
+        "enerjik_spor": ["hız", "spor", "güç", "koşu", "motivasyon", "hareket", "fit"],
+        "sakin_akustik": ["huzur", "kahve", "uyku", "sakin", "dingin", "sessiz", "dinlen"],
+        "hard_rock_metal": ["öfke", "bağırmak", "nefret", "sinir", "kaos", "sert", "isyan"],
+        "indie_alternatif": ["farklı", "boşver", "uzak", "yol", "sanat", "alternatif"],
+        "jazz_blues": ["gece", "loş", "şarap", "yorgun", "melodi", "klasik", "ruh"],
+        "rap_hiphop": ["sokak", "ritim", "sistem", "isyan", "beat", "mücadele"],
+        "elektronik_synth": ["parti", "robot", "uzay", "tekno", "gelecek"]
     }
     
     puanlar = {k:0 for k in keywords.keys()}
@@ -53,59 +54,53 @@ def yedek_analiz(metin, hata_sebebi=""):
             if k in metin: puanlar[cat] += 1
             
     en_yuksek_skor = max(puanlar.values())
-    ek_mesaj = f" ({hata_sebebi})" if hata_sebebi else " (Çevrimdışı Mod)"
+    
+    # HATA MESAJINI KULLANICIYA GÖSTER (DEBUG İÇİN)
+    key_durumu = "VAR" if GEMINI_API_KEY else "YOK"
+    ek_mesaj = f"(HATA: {hata_sebebi} | Key Durumu: {key_durumu})"
 
     if en_yuksek_skor == 0:
-        return "sakin_akustik", f"Net bir duygu tespit edilemedi, standart sakin liste seçildi.{ek_mesaj}"
+        return "sakin_akustik", f"Net bir duygu tespit edilemedi. {ek_mesaj}"
         
-    return max(puanlar, key=puanlar.get), f"Anahtar kelimelere göre analiz yapıldı.{ek_mesaj}"
+    return max(puanlar, key=puanlar.get), f"Yedek sistem analiz yaptı. {ek_mesaj}"
 
 def derin_analiz(metin):
     if not GEMINI_API_KEY:
-        return yedek_analiz(metin, "API Key Eksik (Secrets)")
+        return yedek_analiz(metin, "API Anahtarı Bulunamadı")
 
     headers = {'Content-Type': 'application/json'}
     
-    prompt_text = f"""
-    Sen uzman bir müzik terapistisin.
-    Kullanıcının girdiği şu metni analiz et: "{metin}"
-
-    Görevin:
-    1. Kullanıcının ruh halini en iyi yansıtan MÜZİK KATEGORİSİNİ şunlardan biri olarak seç:
-       [neseli_pop, huzunlu_slow, enerjik_spor, sakin_akustik, indie_alternatif, hard_rock_metal, elektronik_synth, jazz_blues, rap_hiphop]
-    
-    2. Kullanıcıya 1-2 cümlelik, derinlikli, psikolojik bir tespit içeren bir "Doktor Notu" yaz.
-    
-    Çıktıyı SADECE şu formatta ver (araya :: koy):
-    KATEGORI::DOKTOR_NOTU
+    prompt = f"""
+    Sen bir müzik terapistisin. Metni analiz et: "{metin}"
+    Çıktı formatı: KATEGORI::DOKTOR_NOTU
+    Kategoriler: [neseli_pop, huzunlu_slow, enerjik_spor, sakin_akustik, indie_alternatif, hard_rock_metal, elektronik_synth, jazz_blues, rap_hiphop]
+    Doktor notu samimi ve kısa olsun.
     """
     
-    data = {"contents": [{"parts": [{"text": prompt_text}]}]}
-    last_error = ""
-    
-    for model_name in TARGET_MODELS:
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    log_hatalar = []
+
+    for model in TARGET_MODELS:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
             response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
             
             if response.status_code == 200:
-                result = response.json()
                 try:
-                    sonuc = result['candidates'][0]['content']['parts'][0]['text'].strip()
+                    res_json = response.json()
+                    sonuc = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
                     if "::" in sonuc:
                         kategori, yorum = sonuc.split("::", 1)
                         return kategori.strip().lower(), yorum.strip()
-                    else:
-                        return yedek_analiz(metin, "AI Format Hatası")
-                except (KeyError, IndexError):
-                     last_error = f"{model_name} Cevap Boş"
-                     continue
+                except:
+                    log_hatalar.append(f"{model}: Format Hatası")
+                    continue
             else:
-                last_error = f"{model_name} ({response.status_code})"
-                continue
-
+                log_hatalar.append(f"{model}: {response.status_code}")
+                
         except Exception as e:
-            last_error = f"Bağlantı: {str(e)}"
+            log_hatalar.append(f"{model}: {str(e)}")
             continue
 
-    return yedek_analiz(metin, f"Yapay Zeka Bağlanamadı: {last_error}")
+    # Hiçbiri çalışmadıysa
+    return yedek_analiz(metin, f"Tüm modeller başarısız: {log_hatalar}")
