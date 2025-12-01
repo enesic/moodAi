@@ -47,44 +47,60 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
     if not secilen_turler: secilen_turler = ["Pop"]
 
     all_tracks = []
-    # DÜZELTME 1: Eklenen şarkıların ID'lerini hafızada tutmak için küme (set) oluşturuyoruz
     eklenen_sarkilar_ids = set()
     
-    en_keywords = {
-        "neseli_pop": "happy upbeat", "huzunlu_slow": "sad emotional",
-        "enerjik_spor": "workout power", "sakin_akustik": "chill relax",
-        "indie_alternatif": "indie alternative", "hard_rock_metal": "rock metal",
-        "elektronik_synth": "electronic synth", "jazz_blues": "jazz blues",
-        "rap_hiphop": "rap hiphop"
-    }
-    tr_keywords = {
-        "neseli_pop": "hareketli neşeli", "huzunlu_slow": "duygusal damar",
-        "enerjik_spor": "motivasyon spor", "sakin_akustik": "sakin huzurlu",
-        "indie_alternatif": "alternatif", "hard_rock_metal": "anadolu rock",
-        "elektronik_synth": "elektronik", "jazz_blues": "caz blues",
-        "rap_hiphop": "türkçe rap"
-    }
-
-    base_mood_en = en_keywords.get(mood_kategorisi, "pop")
-    base_mood_tr = tr_keywords.get(mood_kategorisi, "pop")
+    # DÜZELTME: Mood kelimelerini (base_mood) kaldırdık. 
+    # Artık arama sadece "Tür" ve "Dil" odaklı yapılacak. 
+    # Bu sayede "Sakin" kelimesi yüzünden Rap şarkısı gelmeyecek.
 
     for tur in secilen_turler:
-        is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz"]
+        # Spotify'ın resmi türleri (genre: ile aratmak için)
+        is_official = tur.lower() in ["acoustic", "rock", "pop", "jazz", "classical", "metal", "piano", "reggae", "blues", "folk", "disco", "hip-hop"]
         
-        if dil_secenegi == 'tr': query = f"Türkçe {base_mood_tr} {tur}"
-        elif dil_secenegi == 'yabanci': query = f"{base_mood_en} {tur}"
-        else: query = f"Türkçe {base_mood_tr} {tur}" if random.choice([True, False]) else f"{base_mood_en} {tur}"
+        # SORGULARI TEMİZLEŞTİRDİK
+        query = ""
+        
+        if dil_secenegi == 'tr':
+            # "Türkçe Pop" gibi zaten içinde Türkçe geçen türleri bozma
+            if "türkçe" in tur.lower() or "turkish" in tur.lower():
+                query = tur
+            else:
+                query = f"Türkçe {tur}"
+                
+        elif dil_secenegi == 'yabanci':
+            if is_official:
+                query = f"genre:{tur}"
+            else:
+                query = f"{tur}"
+                
+        else: # mix
+            # Karışık modda %50 şansla Türkçe ekle
+            if random.choice([True, False]):
+                if "türkçe" in tur.lower():
+                    query = tur
+                else:
+                    query = f"Türkçe {tur}"
+            else:
+                if is_official:
+                    query = f"genre:{tur}"
+                else:
+                    query = f"{tur}"
 
         try:
+            # market='TR' ile Türkiye'de erişilebilir şarkıları getir
             results = sp.search(q=query, limit=5, offset=offset_random, type='track', market='TR')
+            
             if results and 'tracks' in results:
                 for item in results['tracks']['items']:
-                    # DÜZELTME 2: Eğer bu şarkı zaten listede varsa atla
                     track_id = item['id']
+                    
+                    # Tekrar kontrolü
                     if track_id in eklenen_sarkilar_ids:
                         continue
                     
-                    # Yeni şarkıysa listeye ve hafızaya ekle
+                    # Şarkı isminde aradığımız kelime var mı diye basit bir kontrol (Opsiyonel Güvenlik)
+                    # Rap istemiyorsak ve listede Rapozof varsa eleyebiliriz ama şimdilik tür araması yeterli olacaktır.
+                    
                     eklenen_sarkilar_ids.add(track_id)
                     
                     img = item['album']['images'][0]['url'] if item['album']['images'] else None
@@ -96,7 +112,7 @@ def sarki_arastirmasi_yap(sp, mood_kategorisi, offset_random=0, dil_secenegi='mi
                     }
                     all_tracks.append(track)
         except Exception as e:
-            print(f"Hata: {e}")
+            print(f"Hata ({tur}): {e}")
 
     random.shuffle(all_tracks)
     return all_tracks[:20]
