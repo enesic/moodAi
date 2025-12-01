@@ -50,7 +50,6 @@ else:
 # =========================================================
 # ANA UYGULAMA
 # =========================================================
-# GÜNCELLEME: Tür isimleri spotify_manager.py ile %100 uyumlu hale getirildi
 ALT_TURLER = {
     "neseli_pop": ["Türkçe Pop Hareketli", "Yaz Hitleri", "Dance Pop", "Road Trip", "Serdar Ortaç Pop", "90'lar Türkçe Pop", "Disco", "K-Pop", "Reggaeton"],
     "huzunlu_slow": ["Akustik Hüzün", "Melankolik Indie", "Slow Pop", "Piyano & Yağmur", "Türkçe Damar", "Alternatif Balad", "Türkü", "Arabesk", "Kırık Kalpler"],
@@ -66,25 +65,43 @@ ALT_TURLER = {
 def akilli_tur_oner(text, tur_listesi):
     text = text.lower()
     oneriler = []
-    # GÜNCELLEME: "Yürüyorum", "Cadde" gibi kelimeler doğru türlere yönlendirildi
+    
+    # GÜNCELLEME: Tüm modlar için kapsamlı kelime haritası
     mappings = {
+        # SAKİN
         "lo-fi": ["chill", "sakin", "ders", "odak", "lofi"],
-        "jazz vibes": ["kahve", "yağmur", "akşam", "şık"],
-        "spor motivasyon": ["koşu", "spor", "hız", "bas", "antrenman", "gym"], 
+        "jazz vibes": ["kahve", "yağmur", "akşam", "şık", "loş"],
         "akustik cover": ["doğa", "yürüyüş", "manzara", "hafif", "gezi", "sahil", "yürüyorum"], 
         "chill pop": ["cadde", "şehir", "gezinti", "alışveriş", "mood", "yürüyorum", "kafa dinleme"],
-        "türkü": ["türkü", "bağlama", "halk", "köy", "toprak"],
-        "arabesk": ["damar", "baba", "dert", "efkar", "içelim"],
-        "türkçe rap": ["sokak", "mahalle", "hız", "ritim", "araba"]
+        "kitap okuma": ["kitap", "sessiz", "odak", "ders"],
+        
+        # HÜZÜNLÜ (YENİ EKLENENLER)
+        "akustik hüzün": ["tavan", "üstüme", "boşluk", "sessiz", "çaresiz", "yorgun"],
+        "türkçe damar": ["damar", "dert", "keder", "yaram", "sızı", "bitti", "acı"],
+        "melankolik indie": ["yalnız", "şehir", "gece", "yol", "boşver", "vazgeçtim"],
+        "arabesk": ["baba", "efkar", "içelim", "rakı", "sözler"],
+        "türkü": ["türkü", "bağlama", "halk", "köy", "toprak", "memleket"],
+        "piyano & yağmur": ["yağmur", "piyano", "ağla", "gözyaşı"],
+        
+        # ENERJİK
+        "spor motivasyon": ["koşu", "spor", "hız", "bas", "antrenman", "gym", "rekor"], 
+        "türkçe rap": ["sokak", "mahalle", "hız", "ritim", "araba", "bas", "sistem"],
+        "phonk": ["araba", "drift", "bas", "patla", "agresif"]
     }
+    
     for tur, keywords in mappings.items():
+        # Listede bu tür var mı kontrol et (Büyük/küçük harf duyarsız)
         mevcut_tur = next((t for t in tur_listesi if t.lower() == tur.lower()), None)
         if mevcut_tur:
             for kw in keywords:
                 if kw in text:
                     oneriler.append(mevcut_tur)
                     break
+                    
+    # Hiçbir şey bulamazsa listenin başındaki 2 taneyi ver
     if not oneriler: return tur_listesi[:2]
+    
+    # Bulunanları döndür (Max 3 tane)
     return list(set(oneriler))[:3]
 
 st.title("🧠 Mood AI: Müzik Terapisti")
