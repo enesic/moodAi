@@ -4,12 +4,30 @@ from pydantic import BaseModel
 from typing import List, Optional
 import io
 
-from backend.services.spotify import create_spotify_oauth, get_spotify_client, search_tracks, replace_single_track, save_playlist
+from backend.services.spotify import create_spotify_oauth, get_spotify_client, search_tracks, replace_single_track, save_playlist, _create_track_obj
 from backend.services.ai_agent import analyze_mood
 from backend.utils.image_gen import create_mood_card
 from backend.core.config import settings
 
 router = APIRouter()
+
+@router.get("/search-autocomplete")
+def search_autocomplete(q: str, access_token: Optional[str] = None):
+    """Kullanıcı şarkı adı yazarken anlık Spotify arama önerileri döner (iLoveThatTrack tarzı)."""
+    if not q or not q.strip():
+        return {"tracks": []}
+    sp = get_spotify_client(access_token)
+    try:
+        results = sp.search(q=q.strip(), type='track', limit=8)
+        items = results.get('tracks', {}).get('items', [])
+        tracks = []
+        for item in items:
+            t = _create_track_obj(item)
+            if t:
+                tracks.append(t)
+        return {"tracks": tracks}
+    except Exception:
+        return {"tracks": []}
 
 class AnalyzeRequest(BaseModel):
     text: str

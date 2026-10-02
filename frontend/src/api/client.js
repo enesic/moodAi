@@ -17,6 +17,14 @@ export const analyze = async (text) => {
   return res.json();
 };
 
+export const searchAutocomplete = async (query, accessToken = null) => {
+  if (!query || !query.trim()) return { tracks: [] };
+  const tokenParam = accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : '';
+  const res = await fetch(`${BASE_URL}/api/search-autocomplete?q=${encodeURIComponent(query)}${tokenParam}`);
+  if (!res.ok) return { tracks: [] };
+  return res.json();
+};
+
 export const searchTracks = async (params) => {
   const res = await fetch(`${BASE_URL}/api/search-tracks`, {
     method: 'POST',
