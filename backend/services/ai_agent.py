@@ -8,15 +8,15 @@ from backend.core.config import settings
 
 # 9 Ana Kategori ve Alt Türler
 ALT_TURLER = {
-    "neseli_pop": ["Türkçe Pop Hareketli", "Yaz Hitleri", "Dance Pop", "Road Trip", "90'lar Türkçe Pop", "Disco", "K-Pop", "Reggaeton"],
-    "huzunlu_slow": ["Akustik Hüzün", "Melankolik Indie", "Slow Pop", "Piyano & Yağmur", "Türkçe Damar", "Alternatif Balad", "Türkü", "Arabesk", "Kırık Kalpler"],
-    "enerjik_spor": ["Spor Motivasyon", "Türkçe Rap", "Phonk", "Drill", "Techno", "House", "Gym Hits", "Power Workout", "Remix"],
-    "sakin_akustik": ["Lo-Fi Beats", "Chill Pop", "Akustik Cover", "Jazz Vibes", "Enstrümantal", "Kitap Okuma", "Kahve Modu", "Ambient", "Soft Rock", "Sufi/Ney"],
-    "indie_alternatif": ["Alternatif Rock", "Yeni Nesil Indie", "Anadolu Rock", "Shoegaze", "Soft Indie", "Bağımsız Müzik", "Dream Pop"],
-    "hard_rock_metal": ["Türkçe Rock", "Anadolu Rock", "Heavy Metal", "Nu-Metal", "Hard Rock", "Punk", "Garage Rock"],
-    "rap_hiphop": ["Türkçe Rap", "Old School", "Melodic Rap", "Trap", "Arabesk Rap", "Drill", "Underground"],
-    "jazz_blues": ["Smooth Jazz", "Gece Mavisi", "Blues Rock", "Soul", "Vocal Jazz", "Türkçe Caz", "Coffee Table Jazz"],
-    "elektronik_synth": ["Synthwave", "Cyberpunk", "Deep House", "Minimal Techno", "EDM", "Daft Punk Vibe"]
+    "neseli_pop": ["Pop & Dans", "Disco & Retro Pop", "Yaz Hitleri", "K-Pop", "Latin Pop"],
+    "huzunlu_slow": ["Slow & Balad", "Melankolik Slow", "Akustik Hüzün", "Piyano & Yağmur", "Kırık Kalpler"],
+    "enerjik_spor": ["Workout & Motivasyon", "Yüksek BPM Trap", "Power Drill", "Club & Techno Hits"],
+    "sakin_akustik": ["Lo-Fi Beats", "Akustik Gitar & Chill", "Soft Pop", "Coffeehouse Akustik", "Ambient & Dinginlik"],
+    "indie_alternatif": ["Modern Indie Rock", "Dream Pop", "Shoegaze", "Alternatif Rock", "Bohem & Nostalji"],
+    "hard_rock_metal": ["Klasik Rock", "Hard Rock", "Heavy Metal", "Nu-Metal", "Punk & Grunge"],
+    "rap_hiphop": ["Modern Trap", "Old School & Boom Bap", "Melodik Rap", "Drill & Underground"],
+    "jazz_blues": ["Smooth Jazz", "Vocal Jazz", "Blues & Soul", "Gece Mavisi Jazz"],
+    "elektronik_synth": ["Synthwave & Neon", "Deep House", "Minimal Techno", "EDM & Festival"]
 }
 
 # ==============================================================================

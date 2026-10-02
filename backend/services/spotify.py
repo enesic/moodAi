@@ -1,6 +1,6 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, SpotifyClientCredentials
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import random
 import os
 import re
@@ -30,7 +30,8 @@ def get_spotify_client(access_token: Optional[str] = None):
 
 BLACKLIST_KEYWORDS = [
     "asmr", "nursery", "lullaby", "baby sleep", "white noise",
-    "sound effect", "karaoke", "ringtone", "medya konya", "çocuk şarkı"
+    "sound effect", "karaoke", "ringtone", "medya konya", "çocuk şarkı",
+    "children", "lullabies", "sleep sound", "rain sounds for sleep"
 ]
 
 def _create_track_obj(item):
@@ -66,60 +67,48 @@ def _create_track_obj(item):
         'link': item['external_urls']['spotify'] if item.get('external_urls') else None
     }
 
-def extract_seeds_from_inputs(sp, seed_inputs: List[str]) -> Tuple[List[str], List[str]]:
-    """
-    Kullanıcının girdiği Spotify Track/Playlist linklerini veya şarkı isimlerini ayrıştırıp
-    seed_tracks (şarkı ID'leri) ve seed_artists (sanatçı ID'leri) listesi üretir.
-    """
-    seed_track_ids = []
-    seed_artist_ids = []
+# ==============================================================================
+# SEKTÖR STANDARDI TÜRKÇE VE YABANCI KÜRATÖRLÜK MATRİSİ (ANCHOR ARTISTS & GENRES)
+# ==============================================================================
 
-    for raw in seed_inputs:
-        if not raw or not str(raw).strip():
-            continue
-        cleaned = str(raw).strip()
-
-        # 1. Spotify Track Link: https://open.spotify.com/track/XXXXX...
-        track_match = re.search(r'spotify\.com/track/([a-zA-Z0-9]+)', cleaned)
-        if track_match:
-            t_id = track_match.group(1)
-            seed_track_ids.append(t_id)
-            try:
-                t_info = sp.track(t_id)
-                if t_info and t_info.get('artists'):
-                    seed_artist_ids.append(t_info['artists'][0]['id'])
-            except Exception:
-                pass
-            continue
-
-        # 2. Spotify Playlist Link: https://open.spotify.com/playlist/XXXXX...
-        pl_match = re.search(r'spotify\.com/playlist/([a-zA-Z0-9]+)', cleaned)
-        if pl_match:
-            p_id = pl_match.group(1)
-            try:
-                pl_data = sp.playlist_tracks(p_id, limit=5)
-                for item in pl_data.get('items', []):
-                    t = item.get('track')
-                    if t and t.get('id'):
-                        seed_track_ids.append(t['id'])
-                        if t.get('artists'):
-                            seed_artist_ids.append(t['artists'][0]['id'])
-            except Exception:
-                pass
-            continue
-
-        # 3. Düz Metin Şarkı/Sanatçı Arama (Örn: "Duman - Koyu" veya "Coldplay Yellow")
-        try:
-            results = sp.search(q=cleaned, type='track', limit=1)
-            items = results.get('tracks', {}).get('items', [])
-            if items:
-                seed_track_ids.append(items[0]['id'])
-                if items[0].get('artists'):
-                    seed_artist_ids.append(items[0]['artists'][0]['id'])
-        except Exception:
-            pass
-
-    return list(dict.fromkeys(seed_track_ids)), list(dict.fromkeys(seed_artist_ids))
+GENRE_CURATION_MATRIX = {
+    "neseli_pop": {
+        "tr": ["Tarkan", "Edis", "Simge", "Gülşen", "Mabel Matiz", "Kenan Doğulu", "Yalın", "Zeynep Bastık", "Buray", "Hadise", "Murat Boz", "Aleyna Tilki", "Emir Can İğrek", "Derya Uluğ", "Sertab Erener"],
+        "en": ["Dua Lipa", "The Weeknd", "Taylor Swift", "Harry Styles", "Ariana Grande", "Bruno Mars", "Billie Eilish", "Ed Sheeran", "Olivia Rodrigo", "Sabrina Carpenter", "Lady Gaga", "Miley Cyrus", "Katy Perry"]
+    },
+    "huzunlu_slow": {
+        "tr": ["Sezen Aksu", "Model", "Sıla", "Kalben", "Mavi Gri", "Pinhani", "Madrigal", "Dolu Kadehi Ters Tut", "Dedublüman", "Fatma Turgut", "Toygar Işıklı", "Feridun Düzağaç", "Cem Adrian", "Yüzyüzeyken Konuşuruz", "Emre Aydın"],
+        "en": ["Adele", "Sam Smith", "Lewis Capaldi", "Lana Del Rey", "Tom Odell", "James Arthur", "Phoebe Bridges", "Cigarettes After Sex", "Conan Gray", "Kodaline", "Dean Lewis", "Coldplay", "Finneas"]
+    },
+    "enerjik_spor": {
+        "tr": ["Lvbel C5", "Motive", "BLOK3", "UZI", "Ati242", "Ceza", "Mahmut Orhan", "Batuflex", "Heijan", "Massaka", "Çakal", "Ezhel"],
+        "en": ["Eminem", "Travis Scott", "Drake", "Metro Boomin", "David Guetta", "Tiësto", "Martin Garrix", "Skrillex", "Kanye West", "Post Malone", "21 Savage", "Fred again.."]
+    },
+    "sakin_akustik": {
+        "tr": ["Manuş Baba", "Evdeki Saat", "Deniz Tekin", "Cihan Mürtezaoğlu", "Birsen Tezer", "Jehan Barbur", "Can Ozan", "Nilipek", "Bülent Ortaçgil", "Yeni Türkü"],
+        "en": ["Jack Johnson", "Boyce Avenue", "Vance Joy", "Norah Jones", "Jason Mraz", "Ben Howard", "Passenger", "Iron & Wine", "Lofi Girl", "Lauv", "Jeremy Zucker"]
+    },
+    "indie_alternatif": {
+        "tr": ["Adamlar", "Mor ve Ötesi", "Büyük Ev Ablukada", "Son Feci Bisiklet", "Jakuzi", "Lalalar", "Sedef Sebüktekin", "Yaşlı Amca", "Kaan Boşnak", "Hedonutopia", "Perdenin Ardındakiler", "Duman"],
+        "en": ["Arctic Monkeys", "The Neighbourhood", "Tame Impala", "The Strokes", "Foster The People", "Gorillaz", "Radiohead", "The 1975", "Wallows", "Beach House", "Mac DeMarco", "Foals", "Lorde"]
+    },
+    "hard_rock_metal": {
+        "tr": ["Şebnem Ferah", "Duman", "Hayko Cepkin", "Pentagram", "Kurban", "Ogün Sanlısoy", "Teoman", "Manga", "Barış Akarsu", "Gripin", "Yüksek Sadakat", "Athena"],
+        "en": ["Linkin Park", "Metallica", "Guns N' Roses", "Green Day", "Nirvana", "Red Hot Chili Peppers", "Bring Me The Horizon", "Muse", "Foo Fighters", "System Of A Down", "Slipknot", "AC/DC", "Rammstein"]
+    },
+    "rap_hiphop": {
+        "tr": ["Ezhel", "Ceza", "Sagopa Kajmer", "Şanışer", "Lvbel C5", "Motive", "BLOK3", "UZI", "Sefo", "Ati242", "Gazapizm", "Khontkar", "Anıl Piyancı", "Defkhan"],
+        "en": ["Drake", "Travis Scott", "Kendrick Lamar", "Eminem", "J. Cole", "Metro Boomin", "Future", "21 Savage", "Jack Harlow", "Lil Baby", "Playboi Carti", "A$AP Rocky", "Post Malone"]
+    },
+    "jazz_blues": {
+        "tr": ["İlhan Erşahin", "Kerem Görsev", "Karsu", "Jülide Özçelik", "Elif Çağlar", "Fatih Erkoç", "Ayşe Tütüncü", "Önder Focan"],
+        "en": ["Miles Davis", "Frank Sinatra", "Chet Baker", "Gregory Porter", "B.B. King", "Nina Simone", "John Coltrane", "Norah Jones", "Amy Winehouse", "Michael Bublé", "Bill Withers"]
+    },
+    "elektronik_synth": {
+        "tr": ["Mahmut Orhan", "Burak Yeter", "Deeperise", "Hey Douglas", "Faruk Sabancı", "İlkay Şencan", "Arem Özgüç", "Arman Aydın"],
+        "en": ["Calvin Harris", "Avicii", "David Guetta", "Daft Punk", "Swedish House Mafia", "Kygo", "Peggy Gou", "Disclosure", "The Chainsmokers", "Kavinsky", "Gesaffelstein", "Justice"]
+    }
+}
 
 def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int) -> List[dict]:
     """
@@ -157,7 +146,7 @@ def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int) -> Lis
                 pass
             continue
 
-        # 3. Şarkı / Sanatçı İsmi Arama
+        # 3. Düz Metin Arama
         try:
             res = sp.search(q=cleaned, type='track', limit=1)
             items = res.get('tracks', {}).get('items', [])
@@ -166,12 +155,11 @@ def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int) -> Lis
         except Exception:
             pass
 
-    # Benzersiz sanatçılar üzerinden benzer ve popüler parçaları ara
+    # Sanatçılar üzerinden kaliteli parçalar topla
     unique_artists = list(dict.fromkeys(artist_names))[:5]
     for artist in unique_artists:
         try:
-            # Sanatçının en iyi parçalarını ara
-            results = sp.search(q=f'artist:"{artist}"', type='track', limit=6)
+            results = sp.search(q=f'{artist}', type='track', limit=6)
             for item in results.get('tracks', {}).get('items', []):
                 t = _create_track_obj(item)
                 if t:
@@ -181,146 +169,75 @@ def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int) -> Lis
 
     return similar_tracks
 
-def get_optimized_query(genre_name, language, energy_suffix_tr, energy_suffix_en):
-    """Türkçe tür adını Spotify'da aranabilir sorguya çevirir."""
-    genre_map = {
-        "Türkçe Pop Hareketli": ("Türkçe Pop Hareketli", "Upbeat Pop"),
-        "Yaz Hitleri": ("Türkçe Yaz Hitleri", "Summer Hits"),
-        "Dance Pop": ("Türkçe Dance Pop", "Dance Pop"),
-        "Road Trip": ("Türkçe Yolculuk", "Road Trip"),
-        "Serdar Ortaç Pop": ("Serdar Ortaç", "90s Pop"),
-        "90'lar Türkçe Pop": ("90lar Türkçe Pop", "90s Pop"),
-        "Disco": ("Disco", "Disco"),
-        "K-Pop": ("K-Pop", "K-Pop"),
-        "Reggaeton": ("Reggaeton", "Reggaeton"),
-        "Akustik Hüzün": ("Türkçe Akustik Hüzün", "Sad Acoustic"),
-        "Melankolik Indie": ("Türkçe Melankolik Indie", "Sad Indie"),
-        "Slow Pop": ("Türkçe Slow Pop", "Slow Pop"),
-        "Piyano & Yağmur": ("Piyano Yağmur", "Piano Rain"),
-        "Türkçe Damar": ("Damar", "Sad Songs"),
-        "Alternatif Balad": ("Türkçe Alternatif", "Alternative Ballads"),
-        "Türkü": ("Türkü", "Folk"),
-        "Arabesk": ("Arabesk", "Oriental Strings"),
-        "Kırık Kalpler": ("Ayrılık", "Breakup"),
-        "Spor Motivasyon": ("Türkçe Spor Motivasyon", "Workout Motivation"),
-        "Türkçe Rap": ("Türkçe Rap", "Rap"),
-        "Phonk": ("Türkçe Phonk", "Phonk"),
-        "Drill": ("Türkçe Drill", "Drill"),
-        "Techno": ("Türkçe Techno", "Techno"),
-        "House": ("Türkçe House", "House"),
-        "Gym Hits": ("Türkçe Gym", "Gym Hits"),
-        "Power Workout": ("Türkçe Power", "Power Workout"),
-        "Remix": ("Remix", "Remix"),
-        "Lo-Fi Beats": ("Türkçe Lofi", "Lo-Fi Beats"),
-        "Chill Pop": ("Türkçe Chill Pop", "Chill Pop"),
-        "Akustik Cover": ("Türkçe Akustik Cover", "Acoustic Covers"),
-        "Jazz Vibes": ("Türkçe Caz", "Jazz Vibes"),
-        "Enstrümantal": ("Enstrümantal", "Instrumental"),
-        "Kitap Okuma": ("Kitap Okuma", "Reading"),
-        "Kahve Modu": ("Türkçe Kahve", "Coffee House"),
-        "Ambient": ("Ambient", "Ambient"),
-        "Soft Rock": ("Türkçe Soft Rock", "Soft Rock"),
-        "Sufi/Ney": ("Ney", "Sufi"),
-        "Alternatif Rock": ("Türkçe Alternatif Rock", "Alternative Rock"),
-        "Yeni Nesil Indie": ("Türkçe Yeni Nesil Indie", "Modern Indie"),
-        "Anadolu Rock": ("Anadolu Rock", "Psychedelic Rock"),
-        "Shoegaze": ("Türkçe Shoegaze", "Shoegaze"),
-        "Soft Indie": ("Türkçe Soft Indie", "Soft Indie"),
-        "Bağımsız Müzik": ("Türkçe Bağımsız", "Indie"),
-        "Dream Pop": ("Türkçe Dream Pop", "Dream Pop"),
-        "Türkçe Rock": ("Türkçe Rock", "Rock"),
-        "Heavy Metal": ("Türkçe Metal", "Heavy Metal"),
-        "Nu-Metal": ("Türkçe Nu-Metal", "Nu-Metal"),
-        "Hard Rock": ("Türkçe Hard Rock", "Hard Rock"),
-        "Punk": ("Türkçe Punk", "Punk"),
-        "Garage Rock": ("Türkçe Garage", "Garage Rock"),
-        "Old School": ("Türkçe Old School Rap", "Old School Hip Hop"),
-        "Melodic Rap": ("Türkçe Melodic Rap", "Melodic Rap"),
-        "Trap": ("Türkçe Trap", "Trap"),
-        "Arabesk Rap": ("Arabesk Rap", "Melodic Rap"),
-        "Underground": ("Türkçe Underground", "Underground Hip Hop"),
-        "Smooth Jazz": ("Türkçe Caz", "Smooth Jazz"),
-        "Gece Mavisi": ("Gece", "Late Night Jazz"),
-        "Blues Rock": ("Türkçe Blues", "Blues Rock"),
-        "Soul": ("Türkçe Soul", "Soul"),
-        "Vocal Jazz": ("Türkçe Vokal Caz", "Vocal Jazz"),
-        "Türkçe Caz": ("Türkçe Caz", "Jazz"),
-        "Coffee Table Jazz": ("Türkçe Caz", "Coffee Jazz"),
-        "Synthwave": ("Türkçe Synthwave", "Synthwave"),
-        "Cyberpunk": ("Türkçe Cyberpunk", "Cyberpunk"),
-        "Deep House": ("Türkçe Deep House", "Deep House"),
-        "Minimal Techno": ("Türkçe Minimal", "Minimal Techno"),
-        "EDM": ("Türkçe EDM", "EDM"),
-        "Daft Punk Vibe": ("Elektronik", "Daft Punk Style")
-    }
-
-    if genre_name in genre_map:
-        q_tr, q_en = genre_map[genre_name]
-    else:
-        q_tr = f"Türkçe {genre_name}"
-        q_en = genre_name
-
-    if language == 'tr':
-        return f"{q_tr}{energy_suffix_tr}"
-    elif language in ('yabanci', 'en'):
-        return f"{q_en}{energy_suffix_en}"
-    else:  # mix
-        return f"{q_tr}{energy_suffix_tr}" if random.choice([True, False]) else f"{q_en}{energy_suffix_en}"
-
 def search_tracks(sp, mood, language, genres, count, energy_level, seed_inputs: Optional[List[str]] = None):
+    """
+    Kesin Türkçe / Yabancı Ayrımı ve Standart Müzik Türleri Kümelendirmesi ile Şarkı Arama.
+    """
     all_tracks = []
     
-    # 1. Referans Şarkılardan / Playlist Linklerinden Benzer Şarkıları Topla
+    # 1. Referans Şarkılardan Benzer Şarkılar (Varsa)
     if seed_inputs and len(seed_inputs) > 0:
         seed_similars = get_similar_tracks_from_seeds(sp, seed_inputs, count)
         all_tracks.extend(seed_similars)
 
-    # 2. Mod ve Alt Türlerden Şarkıları Ara
-    en_suffix = ""
-    tr_suffix = ""
-    if energy_level == "Yüksek":
-        en_suffix = " upbeat"
-        tr_suffix = " hareketli"
-    elif energy_level == "Düşük":
-        en_suffix = " acoustic"
-        tr_suffix = " yavaş"
+    # 2. Dil Modunu Belirle (TR / Yabancı / Mix)
+    curation_data = GENRE_CURATION_MATRIX.get(mood, GENRE_CURATION_MATRIX["sakin_akustik"])
+    
+    selected_targets = []
+    if language == 'tr':
+        # Yalnızca Türkçe Sanatçılar ve TR Market
+        tr_artists = curation_data["tr"]
+        random.shuffle(tr_artists)
+        selected_targets = [(artist, "TR") for artist in tr_artists[:8]]
+    elif language in ('yabanci', 'en'):
+        # Yalnızca Yabancı Sanatçılar ve US Market
+        en_artists = curation_data["en"]
+        random.shuffle(en_artists)
+        selected_targets = [(artist, "US") for artist in en_artists[:8]]
+    else: # mix (50% TR, 50% Yabancı)
+        tr_sample = random.sample(curation_data["tr"], min(4, len(curation_data["tr"])))
+        en_sample = random.sample(curation_data["en"], min(4, len(curation_data["en"])))
+        selected_targets = [(a, "TR") for a in tr_sample] + [(a, "US") for a in en_sample]
+        random.shuffle(selected_targets)
 
-    for genre in genres:
-        query = get_optimized_query(genre, language, tr_suffix, en_suffix)
+    # 3. Spotify Arama Motorunu Çalıştır
+    for artist_name, market in selected_targets:
         try:
-            results = sp.search(q=query, type='track', limit=min(50, count * 2))
+            results = sp.search(q=f"{artist_name}", type='track', limit=5, market=market)
             items = results.get('tracks', {}).get('items', [])
             for item in items:
-                track = _create_track_obj(item)
-                if track:
-                    all_tracks.append(track)
+                # Sanatçı eşleşmesi doğrulaması (Gerçek şarkı kontrolü)
+                artists = [a['name'].lower() for a in item.get('artists', [])]
+                if any(artist_name.lower() in a for a in artists) or item.get('popularity', 0) >= 30:
+                    track = _create_track_obj(item)
+                    if track:
+                        all_tracks.append(track)
         except Exception:
             continue
 
-    # 3. Tekrar edenleri temizle ve popülariteye göre sırala
+    # 4. Tekrar edenleri temizle ve popülariteye göre sırala
     unique_tracks = {t['id']: t for t in all_tracks}.values()
     final_list = list(unique_tracks)
     
-    # Kaliteli ve popüler şarkıları öne alıp karıştır
+    # Yüksek dinlenmeli gerçek parçaları öne al ve karıştır
     final_list.sort(key=lambda t: t.get('popularity', 0), reverse=True)
     top_pool = final_list[:count * 2] if len(final_list) > count else final_list
     random.shuffle(top_pool)
     return top_pool[:count]
 
 def replace_single_track(sp, mood, exclude_ids, language, genres):
-    if not genres:
-        return None
+    curation_data = GENRE_CURATION_MATRIX.get(mood, GENRE_CURATION_MATRIX["sakin_akustik"])
+    artists = curation_data["tr"] if language == 'tr' else (curation_data["en"] if language in ('en', 'yabanci') else curation_data["tr"] + curation_data["en"])
+    market = "TR" if language == 'tr' else "US"
     
-    genre = random.choice(genres)
-    query = get_optimized_query(genre, language, "", "")
-    
+    random_artist = random.choice(artists)
     try:
-        results = sp.search(q=query, type='track', limit=50)
-        items = results.get('tracks', {}).get('items', [])
-        
-        for item in items:
+        results = sp.search(q=f"{random_artist}", type='track', limit=20, market=market)
+        for item in results.get('tracks', {}).get('items', []):
             if item['id'] not in exclude_ids:
-                return _create_track_obj(item)
+                t = _create_track_obj(item)
+                if t:
+                    return t
     except Exception:
         pass
         
@@ -333,7 +250,6 @@ def save_playlist(sp, track_uris, mood_title):
         user_id = sp.current_user()['id']
         playlist = sp.user_playlist_create(user=user_id, name=f"Mood AI: {mood_title}", public=False)
         
-        # Spotipy can add max 100 tracks per request
         batch_size = 100
         for i in range(0, len(track_uris), batch_size):
             sp.playlist_add_items(playlist_id=playlist['id'], items=track_uris[i:i+batch_size])
