@@ -28,18 +28,41 @@ def get_spotify_client(access_token: Optional[str] = None):
     )
     return spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 
+BLACKLIST_KEYWORDS = [
+    "asmr", "nursery", "lullaby", "baby sleep", "white noise",
+    "sound effect", "karaoke", "ringtone", "medya konya", "çocuk şarkı"
+]
+
 def _create_track_obj(item):
-    if not item:
+    if not item or not item.get('id'):
         return None
+        
+    name = item.get('name', '')
+    artists = item.get('artists', [])
+    artist_name = artists[0]['name'] if artists else 'Unknown'
+    
+    # Süre Filtresi (1 dakika ile 9 dakika arası gerçek şarkılar)
+    duration_ms = item.get('duration_ms', 0)
+    if duration_ms < 60000 or duration_ms > 540000:
+        return None
+
+    # Spam / ASMR / Çocuk şarkısı / Karaoke filtresi
+    name_lower = name.lower()
+    artist_lower = artist_name.lower()
+    for kw in BLACKLIST_KEYWORDS:
+        if kw in name_lower or kw in artist_lower:
+            return None
+
     img = item['album']['images'][0]['url'] if item.get('album') and item['album'].get('images') else None
     return {
         'id': item['id'],
         'uri': item['uri'], 
-        'name': item['name'],
-        'artist': item['artists'][0]['name'] if item.get('artists') else 'Unknown', 
+        'name': name,
+        'artist': artist_name, 
         'album': item['album']['name'] if item.get('album') else 'Unknown',
         'preview_url': item.get('preview_url'), 
         'image': img,
+        'popularity': item.get('popularity', 50),
         'link': item['external_urls']['spotify'] if item.get('external_urls') else None
     }
 
@@ -153,11 +176,15 @@ def search_tracks(sp, mood, language, genres, count, energy_level):
         except Exception:
             continue
 
-    # Remove duplicates
+    # Remove duplicates and prioritize quality tracks (popularity > 15)
     unique_tracks = {t['id']: t for t in all_tracks}.values()
     final_list = list(unique_tracks)
-    random.shuffle(final_list)
-    return final_list[:count]
+    
+    # Sort with preference for popular tracks, then shuffle slightly for freshness
+    final_list.sort(key=lambda t: t.get('popularity', 0), reverse=True)
+    top_pool = final_list[:count * 2] if len(final_list) > count else final_list
+    random.shuffle(top_pool)
+    return top_pool[:count]
 
 def replace_single_track(sp, mood, exclude_ids, language, genres):
     if not genres:
