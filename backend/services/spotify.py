@@ -1,8 +1,9 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, SpotifyClientCredentials
-from typing import Optional
+from typing import Optional, List, Tuple
 import random
 import os
+import re
 import math
 from backend.core.config import settings
 
@@ -21,7 +22,6 @@ def get_spotify_client(access_token: Optional[str] = None):
     if access_token and str(access_token).strip() and str(access_token).strip().lower() not in ("null", "none", "undefined"):
         return spotipy.Spotify(auth=access_token)
     
-    # Misafir Modu: Spotify Developer API credentials ile arama desteği
     client_credentials_manager = SpotifyClientCredentials(
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET
@@ -65,6 +65,121 @@ def _create_track_obj(item):
         'popularity': item.get('popularity', 50),
         'link': item['external_urls']['spotify'] if item.get('external_urls') else None
     }
+
+def extract_seeds_from_inputs(sp, seed_inputs: List[str]) -> Tuple[List[str], List[str]]:
+    """
+    Kullanıcının girdiği Spotify Track/Playlist linklerini veya şarkı isimlerini ayrıştırıp
+    seed_tracks (şarkı ID'leri) ve seed_artists (sanatçı ID'leri) listesi üretir.
+    """
+    seed_track_ids = []
+    seed_artist_ids = []
+
+    for raw in seed_inputs:
+        if not raw or not str(raw).strip():
+            continue
+        cleaned = str(raw).strip()
+
+        # 1. Spotify Track Link: https://open.spotify.com/track/XXXXX...
+        track_match = re.search(r'spotify\.com/track/([a-zA-Z0-9]+)', cleaned)
+        if track_match:
+            t_id = track_match.group(1)
+            seed_track_ids.append(t_id)
+            try:
+                t_info = sp.track(t_id)
+                if t_info and t_info.get('artists'):
+                    seed_artist_ids.append(t_info['artists'][0]['id'])
+            except Exception:
+                pass
+            continue
+
+        # 2. Spotify Playlist Link: https://open.spotify.com/playlist/XXXXX...
+        pl_match = re.search(r'spotify\.com/playlist/([a-zA-Z0-9]+)', cleaned)
+        if pl_match:
+            p_id = pl_match.group(1)
+            try:
+                pl_data = sp.playlist_tracks(p_id, limit=5)
+                for item in pl_data.get('items', []):
+                    t = item.get('track')
+                    if t and t.get('id'):
+                        seed_track_ids.append(t['id'])
+                        if t.get('artists'):
+                            seed_artist_ids.append(t['artists'][0]['id'])
+            except Exception:
+                pass
+            continue
+
+        # 3. Düz Metin Şarkı/Sanatçı Arama (Örn: "Duman - Koyu" veya "Coldplay Yellow")
+        try:
+            results = sp.search(q=cleaned, type='track', limit=1)
+            items = results.get('tracks', {}).get('items', [])
+            if items:
+                seed_track_ids.append(items[0]['id'])
+                if items[0].get('artists'):
+                    seed_artist_ids.append(items[0]['artists'][0]['id'])
+        except Exception:
+            pass
+
+    return list(dict.fromkeys(seed_track_ids)), list(dict.fromkeys(seed_artist_ids))
+
+def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int) -> List[dict]:
+    """
+    Verilen referans şarkı, sanatçı veya playlist linklerinden benzer şarkıları çeker.
+    """
+    similar_tracks = []
+    artist_names = []
+    
+    for raw in seed_inputs:
+        if not raw or not str(raw).strip():
+            continue
+        cleaned = str(raw).strip()
+
+        # 1. Spotify Track Link
+        track_match = re.search(r'spotify\.com/track/([a-zA-Z0-9]+)', cleaned)
+        if track_match:
+            try:
+                t_info = sp.track(track_match.group(1))
+                if t_info and t_info.get('artists'):
+                    artist_names.append(t_info['artists'][0]['name'])
+            except Exception:
+                pass
+            continue
+
+        # 2. Spotify Playlist Link
+        pl_match = re.search(r'spotify\.com/playlist/([a-zA-Z0-9]+)', cleaned)
+        if pl_match:
+            try:
+                pl_data = sp.playlist_tracks(pl_match.group(1), limit=10)
+                for item in pl_data.get('items', []):
+                    t = item.get('track')
+                    if t and t.get('artists'):
+                        artist_names.append(t['artists'][0]['name'])
+            except Exception:
+                pass
+            continue
+
+        # 3. Şarkı / Sanatçı İsmi Arama
+        try:
+            res = sp.search(q=cleaned, type='track', limit=1)
+            items = res.get('tracks', {}).get('items', [])
+            if items and items[0].get('artists'):
+                artist_names.append(items[0]['artists'][0]['name'])
+        except Exception:
+            pass
+
+    # Benzersiz sanatçılar üzerinden benzer ve popüler parçaları ara
+    unique_artists = list(dict.fromkeys(artist_names))[:5]
+    for artist in unique_artists:
+        try:
+            # Sanatçının en iyi parçalarını ara
+            results = sp.search(q=f'artist:"{artist}"', type='track', limit=6)
+            for item in results.get('tracks', {}).get('items', []):
+                t = _create_track_obj(item)
+                if t:
+                    similar_tracks.append(t)
+        except Exception:
+            continue
+
+    return similar_tracks
 
 def get_optimized_query(genre_name, language, energy_suffix_tr, energy_suffix_en):
     """Türkçe tür adını Spotify'da aranabilir sorguya çevirir."""
@@ -152,9 +267,15 @@ def get_optimized_query(genre_name, language, energy_suffix_tr, energy_suffix_en
     else:  # mix
         return f"{q_tr}{energy_suffix_tr}" if random.choice([True, False]) else f"{q_en}{energy_suffix_en}"
 
-def search_tracks(sp, mood, language, genres, count, energy_level):
+def search_tracks(sp, mood, language, genres, count, energy_level, seed_inputs: Optional[List[str]] = None):
     all_tracks = []
-    # Mocking energetic suffixes
+    
+    # 1. Referans Şarkılardan / Playlist Linklerinden Benzer Şarkıları Topla
+    if seed_inputs and len(seed_inputs) > 0:
+        seed_similars = get_similar_tracks_from_seeds(sp, seed_inputs, count)
+        all_tracks.extend(seed_similars)
+
+    # 2. Mod ve Alt Türlerden Şarkıları Ara
     en_suffix = ""
     tr_suffix = ""
     if energy_level == "Yüksek":
@@ -176,11 +297,11 @@ def search_tracks(sp, mood, language, genres, count, energy_level):
         except Exception:
             continue
 
-    # Remove duplicates and prioritize quality tracks (popularity > 15)
+    # 3. Tekrar edenleri temizle ve popülariteye göre sırala
     unique_tracks = {t['id']: t for t in all_tracks}.values()
     final_list = list(unique_tracks)
     
-    # Sort with preference for popular tracks, then shuffle slightly for freshness
+    # Kaliteli ve popüler şarkıları öne alıp karıştır
     final_list.sort(key=lambda t: t.get('popularity', 0), reverse=True)
     top_pool = final_list[:count * 2] if len(final_list) > count else final_list
     random.shuffle(top_pool)

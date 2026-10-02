@@ -21,6 +21,7 @@ class SearchTracksRequest(BaseModel):
     genres: List[str]
     count: int = 20
     energy_level: str = "Orta"
+    seed_inputs: Optional[List[str]] = []
 
 class ReplaceTrackRequest(BaseModel):
     access_token: Optional[str] = None
@@ -70,7 +71,9 @@ def analyze(req: AnalyzeRequest):
 def do_search_tracks(req: SearchTracksRequest):
     sp = get_spotify_client(req.access_token)
     try:
-        tracks = search_tracks(sp, req.mood, req.language, req.genres, req.count, req.energy_level)
+        tracks = search_tracks(
+            sp, req.mood, req.language, req.genres, req.count, req.energy_level, req.seed_inputs
+        )
         return {"tracks": tracks}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

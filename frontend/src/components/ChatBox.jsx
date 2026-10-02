@@ -33,12 +33,30 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken }) => {
   const [count, setCount] = useState(20);
   const [energyLevel, setEnergyLevel] = useState('Orta');
 
+  // Referans Şarkı ve Playlist Linkleri
+  const [seedInputs, setSeedInputs] = useState([]);
+  const [currentSeed, setCurrentSeed] = useState('');
+
+  const handleAddSeed = () => {
+    if (!currentSeed.trim()) return;
+    if (!seedInputs.includes(currentSeed.trim())) {
+      setSeedInputs([...seedInputs, currentSeed.trim()]);
+    }
+    setCurrentSeed('');
+  };
+
+  const handleRemoveSeed = (idx) => {
+    setSeedInputs(seedInputs.filter((_, i) => i !== idx));
+  };
+
   const handleAnalyze = async (customText) => {
     const textToAnalyze = customText || text;
-    if (!textToAnalyze.trim()) return;
+    if (!textToAnalyze.trim() && seedInputs.length === 0) return;
     setLoading(true);
     try {
-      const result = await analyze(textToAnalyze);
+      // Eğer metin yazılmadıysa sadece referans şarkılardan analiz üret
+      const queryText = textToAnalyze.trim() || `Sevdiğim referans parçalar: ${seedInputs.join(', ')}`;
+      const result = await analyze(queryText);
       setAnalysisResult(result);
       if (result.suggested_genres && result.suggested_genres.length > 0) {
           setSelectedGenres(result.suggested_genres);
@@ -66,7 +84,8 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken }) => {
         language: language,
         genres: selectedGenres,
         count: parseInt(count),
-        energy_level: energyLevel
+        energy_level: energyLevel,
+        seed_inputs: seedInputs
       };
       const result = await searchTracks(params);
       onTracksReady(result.tracks, { mood: analysisResult.mood, language, genres: selectedGenres });
@@ -114,19 +133,69 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken }) => {
               Şu an nasıl hissediyorsun? İçinden geçenleri yaz...
             </label>
             <textarea
-              className="w-full h-28 bg-black/30 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm leading-relaxed"
-              placeholder="Örn: Bugün çok yorucu bir gündü, hiçbir şey yapmak istemiyorum sadece dinlenmek istiyorum..."
+              className="w-full h-24 bg-black/30 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-sm leading-relaxed"
+              placeholder="Örn: Bugün çok yorucu bir gündü, hiçbir şey yapmak istemiyorum..."
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
           </div>
 
+          {/* Yeni Özellik: Referans Şarkı / Playlist Linkleri */}
+          <div className="p-3.5 bg-black/25 rounded-2xl border border-white/10 space-y-2.5">
+            <div className="flex justify-between items-center">
+              <label className="text-gray-300 text-xs font-semibold flex items-center gap-1.5">
+                <span>🎵</span> Referans Şarkı veya Çalma Listesi (Opsiyonel)
+              </label>
+              <span className="text-[10px] text-purple-300 bg-purple-900/40 px-2 py-0.5 rounded-full border border-purple-500/30">
+                Benzerlik Motoru
+              </span>
+            </div>
+            
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={currentSeed}
+                onChange={(e) => setCurrentSeed(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSeed())}
+                placeholder="Spotify linki veya Şarkı Adı (Örn: Duman - Koyu)"
+                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-400"
+              />
+              <button
+                type="button"
+                onClick={handleAddSeed}
+                className="px-3.5 py-2 bg-purple-600/60 hover:bg-purple-600 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer"
+              >
+                + Ekle
+              </button>
+            </div>
+
+            {seedInputs.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {seedInputs.map((seed, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-950/80 border border-purple-400/40 text-purple-200 rounded-lg text-[11px]"
+                  >
+                    <span className="max-w-[180px] truncate">{seed}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSeed(idx)}
+                      className="text-gray-400 hover:text-red-400 font-bold ml-1"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => handleAnalyze()}
-            disabled={loading || !text.trim()}
+            disabled={loading || (!text.trim() && seedInputs.length === 0)}
             className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer shadow-lg shadow-purple-600/20"
           >
-            {loading ? <span className="animate-spin text-xl">⏳</span> : <><span>✨</span><span>Ruh Halini Analiz Et</span></>}
+            {loading ? <span className="animate-spin text-xl">⏳</span> : <><span>✨</span><span>Ruh Halini & Referansları Analiz Et</span></>}
           </button>
         </div>
       )}
