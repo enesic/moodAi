@@ -1,64 +1,109 @@
-Mood AI: Yapay Zeka Destekli Müzik Terapisti
+# 🧠 Mood AI: Yapay Zeka Destekli Müzik Terapisti
 
-Mood AI, kullanıcının ruh halini ve duygusal durumunu analiz ederek, Spotify API entegrasyonu aracılığıyla kişiselleştirilmiş müzik reçeteleri (çalma listeleri) oluşturan web tabanlı bir uygulamadır.
+Mood AI, kullanıcının iç döküşünü ve duygu durumunu analiz ederek, Spotify API entegrasyonu aracılığıyla kişiselleştirilmiş müzik reçeteleri ve paylaşılabilir Instagram Story formatında terapi kartları oluşturan modern bir web uygulamasıdır.
 
-Proje Hakkında
+---
 
-Bu proje, doğal dil işleme (NLP) tekniklerini ve müzik platformu entegrasyonlarını birleştirerek kullanıcılarına terapötik bir müzik deneyimi sunmayı amaçlar. Kullanıcının metin tabanlı girdilerini analiz eden sistem, duygu durumunu tespit eder ve bu duruma en uygun frekanstaki şarkıları belirleyerek dinamik bir çalma listesi hazırlar.
+## 🌟 Öne Çıkan Özellikler
 
-Temel Özellikler
+- 🩺 **Hibrit Duygu Analiz Motoru:** Google Gemini 2.5 Flash LLM ve 250+ Türkçe deyim/kelime içeren sıfır maliyetli kural tabanlı yerel NLP motoru.
+- 🚀 **Misafir Modu (Guest Mode):** Spotify hesabı bağlamadan da anında ruh hali analizi yapabilme ve müzik listesini keşfedebilme.
+- 🎵 **Spotify Entegrasyonu:** OAuth 2.0 ile giriş, dinamik şarkı taraması, şarkı değiştirme (replace) ve tek tıkla doğrudan Spotify kütüphanesine liste kaydetme.
+- ☕ **Hızlı Duygu Seçimleri (Mood Chips):** Sakin, efkar, motivasyon, kutlama gibi hazır şablonlar ile hızlı analiz.
+- 📸 **9:16 Instagram Story & Durum Kartı:** Pillow ile üretilen yüksek çözünürlüklü (1080x1920) görsel terapi kartı indirme.
+- ⚡ **Kalıcı Oturum:** Sayfa yenilendiğinde kaybolmayan `localStorage` desteği.
 
-Gelişmiş Duygu Analizi: Kullanıcının girdiği metni analiz ederek ruh halini (Hüzünlü, Enerjik, Sakin vb.) tespit eden hibrit analiz motoru.
+---
 
-Akıllı Müzik Seçimi: Tespit edilen moda uygun olarak Spotify veritabanından dinamik şarkı taraması ve filtreleme.
+## 🛠️ Teknoloji Yığını
 
-Kişiselleştirilebilir Parametreler: Kullanıcılar şarkı sayısını, enerji seviyesini (Düşük/Yüksek tempo) ve dil tercihini (Türkçe/Yabancı) özelleştirebilir.
+- **Backend:** Python 3.10+, FastAPI, Uvicorn, Spotipy (Spotify Web API), Google GenAI SDK, Pillow (PIL), Pydantic Settings
+- **Frontend:** React 19, Vite, Tailwind CSS v4
+- **Dağıtım (0 TL):** Render.com (Backend API) + Vercel (Frontend SPA)
 
-Spotify Entegrasyonu: OAuth 2.0 protokolü ile güvenli kullanıcı girişi ve oluşturulan listelerin doğrudan kullanıcı hesabına kaydedilmesi.
+---
 
-Dinamik İçerik Üretimi: Analiz sonucuna göre kullanıcıya özel "Doktor Notu" ve paylaşılabilir görsel durum kartları (Mood Card) oluşturma.
+## 🚀 Yerel Geliştirme (Local Setup)
 
-Kullanılan Teknolojiler
+### 1. Backend Kurulumu
 
-Programlama Dili: Python
-
-Web Framework: Streamlit
-
-API Entegrasyonu: Spotify Web API (Spotipy Kütüphanesi)
-
-Veri İşleme: Pandas, NumPy
-
-Görüntü İşleme: Pillow (PIL)
-
-HTTP İstekleri: Requests
-
-Kurulum ve Çalıştırma
-
-Projeyi yerel makinenizde çalıştırmak için aşağıdaki adımları izleyebilirsiniz.
-
-Repoyu Klonlayın:
-
-git clone [https://github.com/enesic/MoodAI.git](https://github.com/enesic/MoodAI.git)
-cd MoodAI
-
-
-Gerekli Kütüphaneleri Yükleyin:
+```bash
+# Backend dizininde sanal ortam oluşturun ve bağımlılıkları yükleyin
+cd backend
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
 
 pip install -r requirements.txt
+```
 
+`backend/.env` dosyanızı oluşturun:
+```env
+SPOTIFY_CLIENT_ID=spotify_dashboard_client_id
+SPOTIFY_CLIENT_SECRET=spotify_dashboard_client_secret
+SPOTIFY_REDIRECT_URI=http://localhost:8000/api/callback
+GEMINI_API_KEY=google_ai_studio_api_key
+FRONTEND_URL=http://localhost:5173
+```
 
-Ortam Değişkenlerini Ayarlayın:
-.env dosyası oluşturarak Spotify API anahtarlarınızı tanımlayın.
+Backend'i başlatın:
+```bash
+python main.py
+```
+> API `http://localhost:8000` üzerinde çalışacaktır. Swagger dökümantasyonu: `http://localhost:8000/docs`
 
-SPOTIFY_CLIENT_ID=sizin_client_id
-SPOTIFY_CLIENT_SECRET=sizin_client_secret
+---
 
+### 2. Frontend Kurulumu
 
-Uygulamayı Başlatın:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+> Uygulama `http://localhost:5173` adresinde açılacaktır.
 
-streamlit run app.py
+---
 
+## 🌐 0 TL (Sıfır Maliyetli) Canlıya Alma Rehberi
 
-Lisans
+### Adım 1: Spotify Developer Dashboard Ayarları
+1. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) adresine gidin.
+2. Uygulamanızın ayarlarına girin (**Edit Settings**).
+3. **Redirect URIs** bölümüne hem yerel hem canlı adresinizi ekleyin:
+   - `http://localhost:8000/api/callback`
+   - `https://<YOUR_RENDER_BACKEND_URL>.onrender.com/api/callback`
 
-Bu proje MIT Lisansı ile lisanslanmıştır. Detaylar için LICENSE dosyasına bakabilirsiniz.
+---
+
+### Adım 2: Backend'i Render.com'a Deploy Etme (Ücretsiz)
+1. [Render.com](https://render.com) üzerinde ücretsiz hesap açın ve **New Web Service** seçin.
+2. GitHub reponuzu bağlayın.
+3. Ayarları yapılandırın:
+   - **Environment:** `Python`
+   - **Build Command:** `pip install -r backend/requirements.txt`
+   - **Start Command:** `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
+4. **Environment Variables** bölümüne şunları ekleyin:
+   - `SPOTIFY_CLIENT_ID`
+   - `SPOTIFY_CLIENT_SECRET`
+   - `SPOTIFY_REDIRECT_URI` -> `https://<YOUR_RENDER_BACKEND_URL>.onrender.com/api/callback`
+   - `GEMINI_API_KEY`
+   - `FRONTEND_URL` -> `https://<YOUR_VERCEL_APP>.vercel.app`
+
+---
+
+### Adım 3: Frontend'i Vercel'e Deploy Etme (Ücretsiz)
+1. [Vercel.com](https://vercel.com) üzerinde **Add New Project** seçeneği ile GitHub reponuzu seçin.
+2. **Root Directory** olarak `frontend` seçin.
+3. **Environment Variables** alanına ekleyin:
+   - `VITE_API_URL` -> `https://<YOUR_RENDER_BACKEND_URL>.onrender.com`
+4. **Deploy** butonuna basın.
+
+Tebrikler! Mood AI uygulamanız tamamen ücretsiz bir şekilde canlıda yayında. 🚀
+
+---
+
+## 📄 Lisans
+Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.

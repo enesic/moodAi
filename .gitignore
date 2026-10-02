@@ -1,12 +1,40 @@
-# .gitignore dosyası içeriği:
-
-# --- Şifreler ve Ayarlar ---
+# Environment & Secrets
 .env
-.venv/
-venv/
-__pycache__/
+.env.*
+*.env
+backend/.env
+.cache
+.cache-*
+*.cache
 
-# --- DEVASA DOSYALAR (Bunlar GitHub'a gitmemeli) ---
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+frontend/dist/
+frontend/node_modules/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Large Datasets / Audio
 veriseti/
 islenmis_veri/
 modeller/
