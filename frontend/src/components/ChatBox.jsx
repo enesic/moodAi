@@ -30,6 +30,27 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
   const [searching, setSearching] = useState(false);
   const [selectedTracks, setSelectedTracks] = useState([]);
   const searchTimeoutRef = useRef(null);
+  const dropdownContainerRef = useRef(null);
+
+  // Dışarı tıklandığında veya Escape basıldığında arama sonuçlarını kapat
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target)) {
+        setSearchResults([]);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Canlı Arama (Debounced Autocomplete)
   useEffect(() => {
@@ -145,7 +166,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
   const currentGenres = currentMoodMeta.genres || [];
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/20">
+    <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/20 relative z-30">
       {/* Başlık ve Mod Geçiş Sekmeleri */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <h2 className="text-xl font-bold text-white flex items-center">
@@ -223,7 +244,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                 Sevdiğin Şarkıları Seç (Müzikal Benzerlik Motoru)
               </label>
 
-              <div className="relative">
+              <div ref={dropdownContainerRef} className="relative z-40">
                 <div className="flex items-center bg-black/40 border border-white/15 rounded-2xl px-4 py-3 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/30 transition-all">
                   <span className="text-gray-400 mr-2.5">🔍</span>
                   <input
@@ -234,31 +255,53 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                     className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
                   />
                   {searching && <span className="animate-spin text-xs text-purple-400 ml-2">⏳</span>}
+                  {searchQuery && !searching && (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                      className="text-gray-400 hover:text-white text-xs px-1.5 py-0.5 rounded cursor-pointer ml-1"
+                      title="Temizle"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
 
-                {/* Açılır Arama Sonuçları */}
+                {/* Açılır Arama Sonuçları (Opak Arka Plan, Kapat Butonu & Kesintisiz Stacking) */}
                 {searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-[#120a24]/95 backdrop-blur-xl border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-72 overflow-y-auto divide-y divide-white/5">
-                    {searchResults.map((track) => (
-                      <div
-                        key={track.id}
-                        onClick={() => handleSelectTrack(track)}
-                        className="p-2.5 flex items-center gap-3 hover:bg-purple-600/20 cursor-pointer transition-colors"
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-[#140b2a] border border-purple-500/40 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.95)] overflow-hidden z-50 max-h-64 flex flex-col animate-fadeIn">
+                    <div className="flex items-center justify-between px-3.5 py-2 bg-black/50 border-b border-white/10 text-[11px] text-gray-300 shrink-0">
+                      <span className="font-semibold text-purple-300">🎵 Arama Sonuçları ({searchResults.length})</span>
+                      <button
+                        type="button"
+                        onClick={() => setSearchResults([])}
+                        className="text-gray-400 hover:text-white px-2 py-0.5 rounded cursor-pointer hover:bg-white/10 transition-colors"
                       >
-                        <img
-                          src={track.image || 'https://placehold.co/80x80?text=🎵'}
-                          alt={track.name}
-                          className="w-10 h-10 rounded-lg object-cover shadow"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{track.name}</p>
-                          <p className="text-xs text-gray-400 truncate">{track.artist} • {track.album}</p>
+                        Kapat ✕
+                      </button>
+                    </div>
+                    <div className="overflow-y-auto divide-y divide-white/5 scrollbar-thin scrollbar-thumb-purple-500/30">
+                      {searchResults.map((track) => (
+                        <div
+                          key={track.id}
+                          onClick={() => handleSelectTrack(track)}
+                          className="p-2.5 flex items-center gap-3 hover:bg-purple-600/25 cursor-pointer transition-colors"
+                        >
+                          <img
+                            src={track.image || 'https://placehold.co/80x80?text=🎵'}
+                            alt={track.name}
+                            className="w-10 h-10 rounded-lg object-cover shadow shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{track.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{track.artist} • {track.album}</p>
+                          </div>
+                          <span className="text-xs font-bold text-purple-300 bg-purple-500/20 px-2 py-1 rounded-lg shrink-0">
+                            + Seç
+                          </span>
                         </div>
-                        <span className="text-xs font-bold text-purple-300 bg-purple-500/20 px-2 py-1 rounded-lg">
-                          + Seç
-                        </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
