@@ -19,7 +19,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
 
   // Reçete Ayarları
   const [selectedGenres, setSelectedGenres] = useState([]);
-  const [language, setLanguage] = useState('mix');
+  const [language, setLanguage] = useState('tr');
   const [count, setCount] = useState(20);
   const [energyLevel, setEnergyLevel] = useState('Orta');
   const [therapyMode, setTherapyMode] = useState('catharsis');
@@ -170,36 +170,46 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
   const currentGenres = currentMoodMeta.genres || [];
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/20 relative z-30">
+    <div className="glass-panel rounded-3xl p-6 sm:p-7 relative z-30 shadow-2xl transition-all">
       {/* Başlık ve Mod Geçiş Sekmeleri */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-        <h2 className="text-xl font-bold text-white flex items-center">
-          <span className="mr-2">🎧</span> Müzik Keşif Motoru
-        </h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-lg">
+            🎧
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+              Müzik Keşif Motoru
+            </h2>
+            <p className="text-[11px] text-gray-400">Ruh halini analiz et veya referans parça seç</p>
+          </div>
+        </div>
 
         {step === 1 && (
-          <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 text-xs">
+          <div className="flex bg-black/50 p-1 rounded-2xl border border-white/10 text-xs">
             <button
               type="button"
               onClick={() => setActiveTab('therapist')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'therapist'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              🛋️ Terapi Koltuğu
+              <span>🛋️</span>
+              <span>Terapi Koltuğu</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('search')}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'search'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              🔍 Şarkı Seçerek
+              <span>🔍</span>
+              <span>Şarkı Seçerek</span>
             </button>
           </div>
         )}
@@ -209,18 +219,18 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
         <div className="space-y-4">
           {/* TAB 1: Terapi Koltuğu (Duygu Yazarak) */}
           {activeTab === 'therapist' && (
-            <div className="space-y-3 animate-fadeIn">
+            <div className="space-y-3.5 animate-fadeIn">
               <div>
-                <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                <label className="block text-gray-400 text-[11px] font-semibold uppercase tracking-wider mb-2">
                   Hızlı Ruh Hali Şablonları
                 </label>
-                <div className="flex flex-wrap gap-1.5 mb-3">
+                <div className="flex flex-wrap gap-1.5 mb-3.5">
                   {DEFAULT_QUICK_MOODS.map((qm, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => setText(qm.text)}
-                      className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-purple-600/30 border border-white/10 hover:border-purple-400/40 text-xs font-medium text-gray-200 transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-purple-600/25 border border-white/10 hover:border-purple-400/40 text-xs font-medium text-gray-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
                     >
                       <span>{qm.emoji}</span>
                       <span>{qm.label}</span>
@@ -228,11 +238,11 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                   ))}
                 </div>
 
-                <label className="block text-gray-300 text-sm font-medium mb-1.5">
+                <label className="block text-gray-300 text-xs font-semibold mb-2">
                   Şu an nasıl hissediyorsun? İçinden geçenleri serbestçe yaz...
                 </label>
                 <textarea
-                  className="w-full h-28 bg-black/35 border border-white/15 rounded-2xl p-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none text-sm leading-relaxed"
+                  className="w-full h-28 glass-input rounded-2xl p-4 text-white placeholder-gray-500 focus:outline-none resize-none text-sm leading-relaxed"
                   placeholder="Örn: Çok yoğun bir haftaydı, kahvemi alıp arkama yaslanmak istiyorum..."
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -243,19 +253,19 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
 
           {/* TAB 2: iLoveThatTrack Canlı Şarkı Arama */}
           {activeTab === 'search' && (
-            <div className="space-y-3 animate-fadeIn">
-              <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider">
+            <div className="space-y-3.5 animate-fadeIn">
+              <label className="block text-gray-400 text-[11px] font-semibold uppercase tracking-wider">
                 Sevdiğin Şarkıları Seç (Müzikal Benzerlik Motoru)
               </label>
 
               <div ref={dropdownContainerRef} className="relative z-40">
-                <div className="flex items-center bg-black/40 border border-white/15 rounded-2xl px-4 py-3 focus-within:border-purple-400 focus-within:ring-2 focus-within:ring-purple-500/30 transition-all">
+                <div className="flex items-center glass-input rounded-2xl px-4 py-3 transition-all">
                   <span className="text-gray-400 mr-2.5">🔍</span>
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Şarkı veya sanatçı adı yaz (Örn: Tarkan, Arctic Monkeys, Sezen Aksu...)"
+                    placeholder="Şarkı veya sanatçı adı yaz (Örn: Tarkan, Pera, Duman, Arctic Monkeys...)"
                     className="w-full bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
                   />
                   {searching && <span className="animate-spin text-xs text-purple-400 ml-2">⏳</span>}
@@ -263,7 +273,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                     <button
                       type="button"
                       onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                      className="text-gray-400 hover:text-white text-xs px-1.5 py-0.5 rounded cursor-pointer ml-1"
+                      className="text-gray-400 hover:text-white text-xs px-2 py-0.5 rounded cursor-pointer ml-1 hover:bg-white/10"
                       title="Temizle"
                     >
                       ✕
@@ -374,13 +384,13 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
       {step === 2 && analysisResult && (
         <div className="space-y-5 animate-fadeIn">
           {/* Teşhis & Russell Modeli Kartı */}
-          <div className="p-4 bg-purple-900/40 rounded-2xl border border-purple-500/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="p-4.5 rounded-2xl bg-gradient-to-r from-purple-900/30 to-indigo-900/30 border border-purple-500/25 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
-              <span className="text-purple-300 text-[11px] uppercase font-bold tracking-wider">
+              <span className="text-purple-300/80 text-[10px] uppercase font-bold tracking-wider">
                 Teşhis Edilen Ruh Hali
               </span>
-              <p className="text-white text-lg font-bold capitalize flex items-center gap-2">
-                <span>{currentMoodMeta.emoji || "🧠"}</span>
+              <p className="text-white text-lg font-bold capitalize flex items-center gap-2 mt-0.5">
+                <span className="text-xl">{currentMoodMeta.emoji || "🧠"}</span>
                 <span>{currentMoodMeta.name || analysisResult.mood.replace(/_/g, ' ')}</span>
               </p>
             </div>
@@ -400,10 +410,10 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
           {/* Terapi Modu Seçimi (ISO Prensibi) */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider">
+              <label className="block text-gray-400 text-[11px] font-semibold uppercase tracking-wider">
                 Terapi Modu (Müzikal Yolculuk)
               </label>
-              <span className="text-[11px] text-purple-300 font-medium">ISO Prensibi</span>
+              <span className="text-[11px] text-purple-400 font-semibold">ISO Prensibi</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -418,10 +428,10 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                     key={m.id}
                     type="button"
                     onClick={() => setTherapyMode(m.id)}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-purple-600/30 border-purple-400 text-white shadow-md shadow-purple-500/20'
-                        : 'bg-black/30 border-white/10 text-gray-300 hover:bg-white/5'
+                        ? 'bg-purple-600/35 border-purple-400/70 text-white shadow-lg shadow-purple-600/25 ring-1 ring-purple-400/30'
+                        : 'bg-black/30 border-white/5 text-gray-300 hover:bg-white/5 hover:border-white/15'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -439,7 +449,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
           {currentGenres.length > 0 && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="block text-gray-300 text-xs font-semibold uppercase tracking-wider">
+                <label className="block text-gray-400 text-[11px] font-semibold uppercase tracking-wider">
                   Önerilen Müzik Türleri
                 </label>
                 <span className="text-xs text-purple-400 font-semibold">{selectedGenres.length} seçili</span>
@@ -467,13 +477,13 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
           )}
 
           {/* Dil & Enerji */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3.5">
             <div className="space-y-1.5">
-              <label className="block text-gray-300 text-xs font-medium">Dil Tercihi</label>
+              <label className="block text-gray-400 text-xs font-medium">Dil Tercihi</label>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                className="w-full glass-input rounded-xl p-2.5 text-xs text-white focus:outline-none cursor-pointer"
               >
                 <option value="tr">🇹🇷 Türkçe (Sadece TR Sanatçılar)</option>
                 <option value="en">🌍 Yabancı (Global Hitler)</option>
@@ -482,11 +492,11 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-gray-300 text-xs font-medium">Enerji Seviyesi</label>
+              <label className="block text-gray-400 text-xs font-medium">Enerji Seviyesi</label>
               <select
                 value={energyLevel}
                 onChange={(e) => setEnergyLevel(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                className="w-full glass-input rounded-xl p-2.5 text-xs text-white focus:outline-none cursor-pointer"
               >
                 <option value="Düşük">Düşük (Akustik / Sakin)</option>
                 <option value="Orta">Orta (Dengeli)</option>
@@ -507,7 +517,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
               max="50"
               value={count}
               onChange={(e) => setCount(e.target.value)}
-              className="w-full accent-purple-500 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              className="w-full accent-purple-500 h-2 bg-gray-700/60 rounded-lg appearance-none cursor-pointer"
             />
           </div>
 
@@ -515,16 +525,16 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
           <div className="flex gap-3 pt-2">
             <button
               onClick={() => setStep(1)}
-              className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all cursor-pointer text-sm font-semibold"
+              className="px-5 py-3.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-2xl transition-all cursor-pointer text-sm font-semibold border border-white/10"
             >
-              Geri
+              ← Geri
             </button>
             <button
               onClick={handleSearch}
               disabled={loading}
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] cursor-pointer"
+              className="flex-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3.5 px-6 rounded-2xl transition-all duration-300 disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg shadow-purple-600/30 transform hover:scale-[1.01] cursor-pointer text-sm"
             >
-              {loading ? <span className="animate-spin text-lg">⏳ Reçete Hazırlanıyor...</span> : <span>Reçeteyi Oluştur 🎵</span>}
+              {loading ? <span className="animate-spin text-base">⏳ Reçete Hazırlanıyor...</span> : <span>Reçeteyi Oluştur 🎵</span>}
             </button>
           </div>
         </div>

@@ -95,25 +95,30 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
   };
 
   return (
-    <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/10 flex flex-col h-full max-h-[850px]">
+    <div className="glass-panel rounded-3xl p-6 sm:p-7 flex flex-col h-full max-h-[850px] shadow-2xl transition-all">
       {/* Başlık & İstatistik */}
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center">
-            <span className="mr-2">🎧</span> Senin İçin Seçilen Reçete
-          </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Her parça ruh halinize ve duygu akışınıza özel olarak sıralandı.
-          </p>
+      <div className="flex justify-between items-center mb-5 pb-3 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-xl shadow-inner">
+            🎧
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight flex items-center gap-2">
+              <span>Senin İçin Seçilen Reçete</span>
+            </h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Her parça duygu durumuna ve seçilen terapi yolculuğuna göre sıralandı.
+            </p>
+          </div>
         </div>
-        <span className="bg-purple-600/30 text-purple-300 px-3 py-1 rounded-full text-xs font-bold tracking-wide border border-purple-500/30 shrink-0">
+        <span className="bg-purple-500/20 text-purple-300 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide border border-purple-400/30 shrink-0 shadow-sm">
           {tracks.length} Şarkı
         </span>
       </div>
 
       {/* Spotify Embed Oynatıcı Paneli */}
       {activeEmbedTrack && (
-        <div className="mb-4 bg-black/40 rounded-2xl p-2 border border-white/10 shadow-lg">
+        <div className="mb-4 bg-black/60 rounded-2xl p-2 border border-white/10 shadow-xl overflow-hidden animate-fadeIn">
           <iframe
             title={`Spotify Player: ${activeEmbedTrack.name}`}
             src={`https://open.spotify.com/embed/track/${activeEmbedTrack.id}?utm_source=generator&theme=0`}
@@ -138,14 +143,14 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
             <div
               key={`${track.id}-${index}`}
               onClick={() => handleSelectTrackForPlayer(track)}
-              className={`flex items-center gap-3.5 p-2.5 sm:p-3 rounded-2xl transition-all duration-200 cursor-pointer border ${
+              className={`flex items-center gap-3.5 p-3 rounded-2xl transition-all duration-200 cursor-pointer border ${
                 isSelected
-                  ? 'bg-purple-900/40 border-purple-500/60 shadow-lg shadow-purple-500/20'
+                  ? 'bg-purple-900/40 border-purple-400/60 shadow-lg shadow-purple-600/20 ring-1 ring-purple-400/30'
                   : 'bg-black/25 hover:bg-black/45 border-white/5 hover:border-white/15'
               }`}
             >
               {/* Sıra Numarası */}
-              <span className="text-xs font-bold text-gray-400 w-5 text-center shrink-0">
+              <span className="text-xs font-bold text-gray-400 w-5 text-center shrink-0 font-mono">
                 {index + 1}
               </span>
 
@@ -164,7 +169,7 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
               {/* Şarkı Bilgileri */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h4 className={`text-xs sm:text-sm font-semibold truncate ${isSelected ? 'text-purple-300' : 'text-white'}`}>
+                  <h4 className={`text-xs sm:text-sm font-semibold truncate ${isSelected ? 'text-purple-300 font-bold' : 'text-white'}`}>
                     {track.name}
                   </h4>
                   {stageBadge && (
@@ -173,8 +178,8 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
                     </span>
                   )}
                 </div>
-                <p className="text-gray-400 text-[11px] sm:text-xs truncate">
-                  {track.artists || track.artist} • {track.album}
+                <p className="text-gray-400 text-[11px] sm:text-xs truncate mt-0.5">
+                  <span className="font-medium text-gray-300">{track.artists || track.artist}</span> • {track.album}
                 </p>
               </div>
 
@@ -195,7 +200,7 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 transition-all text-xs"
+                    className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-green-500/20 text-gray-400 hover:text-green-400 transition-all text-xs border border-transparent hover:border-green-500/30"
                     title="Spotify'da Aç"
                   >
                     ↗️
@@ -204,7 +209,7 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
                 <button
                   onClick={(e) => handleReplace(e, index)}
                   disabled={replacingIdx === index}
-                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-purple-500/20 text-gray-300 hover:text-purple-300 transition-all disabled:opacity-50 text-xs cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-purple-500/20 text-gray-300 hover:text-purple-300 transition-all disabled:opacity-50 text-xs cursor-pointer border border-transparent hover:border-purple-400/30"
                   title="Farklı bir şarkıyla değiştir"
                 >
                   {replacingIdx === index ? <span className="animate-spin text-xs">⏳</span> : <span>🔄</span>}
@@ -218,10 +223,10 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
       {/* Kaydetme Butonu & Bağlantı */}
       <div className="pt-4 mt-3 border-t border-white/10">
         {savedLink ? (
-          <div className="bg-emerald-900/40 border border-emerald-500/40 rounded-2xl p-3.5 text-center animate-fadeIn flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-4 text-center animate-fadeIn flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
             <div className="text-left">
-              <p className="text-white font-bold text-xs sm:text-sm">🎉 Spotify Hesabına Eklendi!</p>
-              <p className="text-gray-300 text-[11px]">Çalma listen kütüphanende hazır.</p>
+              <p className="text-emerald-300 font-bold text-xs sm:text-sm">🎉 Spotify Hesabına Eklendi!</p>
+              <p className="text-gray-300 text-[11px]">Çalma listen doğrudan kütüphanende hazır.</p>
             </div>
             <a
               href={savedLink}
@@ -236,13 +241,13 @@ const Playlist = ({ tracks, accessToken, mood, language, genres, onTrackReplace,
           <button
             onClick={handleSave}
             disabled={saving || tracks.length === 0}
-            className="w-full bg-gradient-to-r from-[#1DB954] to-[#179c46] hover:from-[#1ed760] hover:to-[#1eb552] text-black font-extrabold py-3.5 px-6 rounded-2xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg shadow-green-500/20 hover:scale-[1.01] cursor-pointer text-sm"
+            className="w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold py-3.5 px-6 rounded-2xl transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg shadow-green-500/25 hover:scale-[1.01] cursor-pointer text-sm"
           >
             {saving ? (
-              <span className="animate-spin text-lg">⏳ Kaydediliyor...</span>
+              <span className="animate-spin text-base">⏳ Spotify'a Aktarılıyor...</span>
             ) : (
               <>
-                <span>✅</span>
+                <span className="text-base">✅</span>
                 <span>Spotify Çalma Listesi Olarak Kaydet</span>
               </>
             )}

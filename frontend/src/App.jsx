@@ -208,14 +208,16 @@ function App() {
       </div>
 
       {/* Header */}
-      <header className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="text-3xl sm:text-4xl bg-white/10 p-2 sm:p-2.5 rounded-2xl backdrop-blur-sm border border-white/20 shadow-lg">🧠</div>
+      <header className="max-w-7xl mx-auto mb-8 flex justify-between items-center pb-2">
+        <div className="flex items-center gap-3.5">
+          <div className="text-3xl sm:text-4xl bg-purple-500/15 p-2 sm:p-2.5 rounded-2xl border border-purple-400/25 shadow-lg backdrop-blur-md">
+            🧠
+          </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-pink-300 to-indigo-300">
               Mood AI
             </h1>
-            <p className="text-[11px] sm:text-xs text-gray-400">Yapay Zeka Destekli Müzik Terapisti</p>
+            <p className="text-[11px] sm:text-xs text-gray-400 font-medium">Yapay Zeka Destekli Müzik Terapisti</p>
           </div>
         </div>
 
@@ -224,7 +226,7 @@ function App() {
           {analysisResult && (
             <button
               onClick={() => setShowRussellMap(true)}
-              className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 rounded-xl text-xs font-medium cursor-pointer transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
               title="Russell Çevresel Duygu Haritası"
             >
               <span>🧭</span>
@@ -236,24 +238,24 @@ function App() {
           {history.length > 0 && (
             <button
               onClick={() => setShowHistory(true)}
-              className="px-3 py-1.5 bg-white/5 hover:bg-white/15 text-gray-300 border border-white/10 rounded-xl text-xs font-medium cursor-pointer transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
             >
               <span>📜</span>
               <span className="hidden sm:inline">Geçmiş</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-purple-500/30 text-[10px] font-bold">{history.length}</span>
+              <span className="px-2 py-0.5 rounded-full bg-purple-500/30 text-[10px] font-bold text-purple-200">{history.length}</span>
             </button>
           )}
 
           {/* Spotify Durumu / Giriş */}
           {accessToken ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1DB954]/10 border border-[#1DB954]/30 text-[#1ed760] rounded-full text-xs font-semibold">
+            <span className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#1DB954]/10 border border-[#1DB954]/30 text-[#1ed760] rounded-full text-xs font-bold shadow-sm">
               <span className="w-2 h-2 rounded-full bg-[#1ed760] animate-pulse" />
               <span className="hidden sm:inline">Spotify</span> Bağlı
             </span>
           ) : (
             <a
               href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/login`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full text-xs transition-all shadow-md shadow-green-500/20"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold rounded-full text-xs transition-all shadow-md shadow-green-500/20 hover:scale-105"
             >
               <span>🎵</span>
               <span className="hidden sm:inline">Spotify ile</span> Bağlan
@@ -262,7 +264,7 @@ function App() {
 
           <button
             onClick={handleLogout}
-            className="px-3 py-1.5 bg-white/5 hover:bg-red-500/20 text-gray-300 hover:text-red-400 rounded-xl transition-all border border-transparent hover:border-red-500/30 text-xs font-medium cursor-pointer"
+            className="px-3.5 py-2 bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 rounded-xl transition-all border border-transparent hover:border-rose-500/30 text-xs font-semibold cursor-pointer"
           >
             Çıkış
           </button>
@@ -309,11 +311,15 @@ function App() {
               />
             </div>
           ) : (
-            <div className="h-full bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 flex flex-col items-center justify-center p-10 text-center">
-              <div className="text-6xl mb-6 opacity-60">🎧</div>
-              <h3 className="text-xl font-medium text-gray-300 mb-2">Çalma Listen Burada Görünecek</h3>
+            <div className="h-full glass-panel rounded-3xl flex flex-col items-center justify-center p-10 text-center relative overflow-hidden group">
+              <div className="w-20 h-20 rounded-3xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-4xl mb-5 shadow-inner">
+                🎧
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+                Müzik Reçeten Burada Belirecek
+              </h3>
               <p className="text-gray-400 text-sm max-w-sm leading-relaxed">
-                Ruh halini yazıp "Reçeteyi Oluştur" butonuna bastığında sana özel hazırladığımız terapi listesi ve in-app Spotify oynatıcı burada belirecek.
+                Ruh halini yazıp veya sevdiğin parçaları seçip <strong className="text-purple-300">"Reçeteyi Oluştur"</strong> butonuna bastığında sana özel hazırladığımız terapi listesi ve Spotify çaları burada açılacak.
               </p>
             </div>
           )}

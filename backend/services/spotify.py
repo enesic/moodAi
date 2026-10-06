@@ -331,20 +331,35 @@ def _sample_targets(mood: str, language: str, n: int) -> List[Tuple[str, str]]:
     return random.sample(pool, min(n, len(pool)))
 
 
-def _artist_query_tracks(sp, artist_name: str, market: str, limit: int = SEARCH_LIMIT_MAX) -> List[dict]:
-    """Sanatçı filtresiyle arama yapar ve gerçekten o sanatçıya ait parçaları döndürür."""
+def _artist_query_tracks(sp, artist_name: str, market: Optional[str], limit: int = SEARCH_LIMIT_MAX) -> List[dict]:
+    """
+    Sanatçı filtresiyle arama yapar ve kesin doğrulama yapar.
+    'Model' arandığında 'ROLE MODEL', 'Duman' arandığında 'Dumana' gibi
+    yanlış sanatçıların sızmasını engeller.
+    """
     items = _search_items(sp, f'artist:"{artist_name}"', market=market, limit=limit)
     if not items:
         items = _search_items(sp, artist_name, market=market, limit=limit)
-    target = artist_name.lower()
+    target = artist_name.strip().lower()
     tracks = []
     for i, item in enumerate(items):
-        names = [a.get("name", "").lower() for a in item.get("artists") or []]
-        if any(target in n or n in target for n in names if n):
+        names = [a.get("name", "").strip().lower() for a in item.get("artists") or []]
+        # Kesin eşleşme doğrulaması
+        is_match = False
+        for n in names:
+            if n == target:
+                is_match = True
+                break
+            # Şarkıda birden fazla sanatçı veya grup adı kelimesi varsa (örn: "Pera" in ["pera"])
+            if target in n.split():
+                is_match = True
+                break
+        if is_match:
             t = _create_track_obj(item, rank=i)
             if t:
                 tracks.append(t)
     return tracks
+
 
 
 def _genre_query_tracks(sp, query: str, market: str = "US") -> List[dict]:
@@ -402,15 +417,19 @@ def _resolve_seed_artists(sp, raw: str) -> Tuple[List[str], List[str]]:
     return [], []
 
 
-def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int = 20) -> List[dict]:
+def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int = 20, language: str = "mix") -> List[dict]:
     """
     Referans şarkı, sanatçı veya playlist linklerinden benzer şarkıları çeker.
     Sanatçı kümeleme (artist directory) sayesinde referans sanatçıların tarzına
     tam uyumlu benzer sanatçıları da sorguya dahil eder.
+    Dil seçeneği 'tr' ise aramayı ve filtreyi Türkiye marketine (TR) kilitler.
     """
     seeds = [s for s in (seed_inputs or []) if s and str(s).strip()][:5]
     if not seeds:
         return []
+
+    # Dil marketini belirle
+    seed_market = "TR" if language == "tr" else ("US" if language in ("en", "yabanci") else None)
 
     artist_names: List[str] = []
     seed_ids: set = set()
@@ -430,9 +449,10 @@ def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int = 20) -
     all_target_artists = list(dict.fromkeys(unique_seed_artists + cluster_artists))[:10]
 
     similar: List[dict] = []
-    for tracks in _seed_executor.map(lambda a: _artist_query_tracks(sp, a, market=None), all_target_artists):
+    for tracks in _seed_executor.map(lambda a: _artist_query_tracks(sp, a, market=seed_market), all_target_artists):
         similar.extend(t for t in tracks if t["id"] not in seed_ids)
     return similar
+
 
 
 
@@ -528,7 +548,7 @@ def search_tracks(
                     tasks.append((idx, "genre", lambda q=q: _genre_query_tracks(sp, q)))
 
     if seed_inputs:
-        tasks.append((0, "seed", lambda: get_similar_tracks_from_seeds(sp, seed_inputs, count)))
+        tasks.append((0, "seed", lambda: get_similar_tracks_from_seeds(sp, seed_inputs, count, language=language)))
 
     pools: Dict[int, List[dict]] = {i: [] for i in range(len(stages))}
     for stage, source, tracks in _run_parallel(tasks):
