@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     SPOTIFY_CLIENT_SECRET: str = "your_spotify_client_secret"
     SPOTIFY_REDIRECT_URI: str = "http://localhost:8000/api/callback"
     GEMINI_API_KEY: str = "your_gemini_api_key"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_TIMEOUT_SECONDS: float = 6.0
     FRONTEND_URL: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(

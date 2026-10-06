@@ -12,16 +12,12 @@ from backend.core.config import settings
 app = FastAPI(title="Mood AI API", description="Yapay Zeka Destekli Müzik Terapisti API")
 
 # Configure CORS
-origins = [
-    settings.FRONTEND_URL,
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000"
-]
+configured_origins = [settings.FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]
+origins = list(dict.fromkeys([o.rstrip("/") for o in configured_origins if o and o != "*"]))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if settings.FRONTEND_URL != "*" else ["*"],
+    allow_origins=["*"] if settings.FRONTEND_URL == "*" else origins,
     allow_origin_regex=r"https://.*\.vercel\.app" if settings.FRONTEND_URL != "*" else None,
     allow_credentials=True,
     allow_methods=["*"],

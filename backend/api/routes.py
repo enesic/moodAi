@@ -1,128 +1,234 @@
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import RedirectResponse, StreamingResponse
-from pydantic import BaseModel
-from typing import List, Optional
 import io
+import urllib.parse
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-from backend.services.spotify import create_spotify_oauth, get_spotify_client, search_tracks, replace_single_track, save_playlist, _create_track_obj
+from backend.core.config import settings
+from backend.core.moods import public_meta
+from backend.services.spotify import (
+    SpotifyAuthError,
+    exchange_code,
+    get_authorize_url,
+    get_spotify_client,
+    refresh_user_token,
+    replace_single_track,
+    save_playlist,
+    search_autocomplete as spotify_search_autocomplete,
+    search_tracks,
+    verify_oauth_state,
+)
 from backend.services.ai_agent import analyze_mood
 from backend.utils.image_gen import create_mood_card
-from backend.core.config import settings
 
 router = APIRouter()
 
-@router.get("/search-autocomplete")
-def search_autocomplete(q: str, access_token: Optional[str] = None):
-    """Kullanıcı şarkı adı yazarken anlık Spotify arama önerileri döner (iLoveThatTrack tarzı)."""
-    if not q or not q.strip():
-        return {"tracks": []}
-    sp = get_spotify_client(access_token)
-    try:
-        results = sp.search(q=q.strip(), type='track', limit=8)
-        items = results.get('tracks', {}).get('items', [])
-        tracks = []
-        for item in items:
-            t = _create_track_obj(item)
-            if t:
-                tracks.append(t)
-        return {"tracks": tracks}
-    except Exception:
-        return {"tracks": []}
+
+# ==============================================================================
+# ŞEMALAR & DOĞRULAMA (PYDANTIC)
+# ==============================================================================
 
 class AnalyzeRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1, max_length=2000, description="Kullanıcının iç döküşü / ruh hali metni")
+
 
 class SearchTracksRequest(BaseModel):
     access_token: Optional[str] = None
-    mood: str
-    language: str = "mix"
-    genres: List[str]
-    count: int = 20
-    energy_level: str = "Orta"
-    seed_inputs: Optional[List[str]] = []
+    mood: str = Field(..., min_length=2, max_length=50)
+    language: str = Field(default="mix", pattern="^(tr|en|yabanci|mix)$")
+    genres: List[str] = Field(default_factory=list)
+    count: int = Field(default=20, ge=5, le=50)
+    energy_level: str = Field(default="Orta", pattern="^(Düşük|Orta|Yüksek)$")
+    therapy_mode: str = Field(default="catharsis", pattern="^(catharsis|uplift|calm)$")
+    seed_inputs: Optional[List[str]] = Field(default_factory=list)
+
 
 class ReplaceTrackRequest(BaseModel):
     access_token: Optional[str] = None
-    mood: str
-    exclude_ids: List[str]
-    language: str = "mix"
-    genres: List[str]
+    mood: str = Field(..., min_length=2, max_length=50)
+    exclude_ids: List[str] = Field(default_factory=list)
+    exclude_artists: Optional[List[str]] = Field(default_factory=list)
+    language: str = Field(default="mix", pattern="^(tr|en|yabanci|mix)$")
+    genres: List[str] = Field(default_factory=list)
+
 
 class SavePlaylistRequest(BaseModel):
     access_token: Optional[str] = None
-    track_uris: List[str]
-    mood_title: str
+    track_uris: List[str] = Field(..., min_length=1, max_length=100)
+    mood_title: str = Field(..., min_length=2, max_length=100)
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=10)
+
 
 class MoodCardRequest(BaseModel):
     mood: str
-    doktor_notu: str
-    sarki_adi: str
+    doktor_notu: str = Field(..., max_length=600)
+    sarki_adi: str = Field(..., max_length=200)
+    sanatci_adi: Optional[str] = Field(default=None, max_length=200)
+    track_count: int = Field(default=20, ge=1, le=100)
+    image_url: Optional[str] = None
+
+
+# ==============================================================================
+# ENDPOINTLER
+# ==============================================================================
+
+@router.get("/meta")
+def get_meta():
+    """Uygulama genelindeki ruh halleri, türler, terapi modları ve Russell koordinatları."""
+    return public_meta()
+
+
+@router.get("/search-autocomplete")
+def search_autocomplete(q: str = Query(..., min_length=1, max_length=100), access_token: Optional[str] = None):
+    """Kullanıcı şarkı adı yazarken anlık Spotify arama önerileri (iLoveThatTrack modu)."""
+    sp = get_spotify_client(access_token)
+    try:
+        tracks = spotify_search_autocomplete(sp, q, limit=8)
+        return {"tracks": tracks}
+    except SpotifyAuthError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except Exception:
+        return {"tracks": []}
 
 
 @router.get("/login")
 def login():
-    sp_oauth = create_spotify_oauth()
-    auth_url = sp_oauth.get_authorize_url()
+    """Spotify OAuth 2.0 yetkilendirme linkini (CSRF state korumalı) döner."""
+    auth_url = get_authorize_url()
     return {"auth_url": auth_url}
 
+
 @router.get("/callback")
-def callback(code: Optional[str] = None, error: Optional[str] = None):
-    # Spotify hata ile döndüyse (kullanıcı izin vermedi veya client_id geçersiz)
+def callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """
+    Spotify OAuth dönüşü.
+    Token'lar referer / proxy loglarında görünmemesi için URL hash fragment (#) ile iletilir.
+    """
+    base_fe = settings.FRONTEND_URL.rstrip("/")
     if error or not code:
-        error_msg = error or "Kod alınamadı"
-        return RedirectResponse(url=f"{settings.FRONTEND_URL}?error={error_msg}")
-    
-    sp_oauth = create_spotify_oauth()
+        err_msg = error or "Yetkilendirme kodu alınamadı"
+        return RedirectResponse(url=f"{base_fe}/#error={urllib.parse.quote(err_msg)}")
+
+    if not verify_oauth_state(state):
+        return RedirectResponse(url=f"{base_fe}/#error={urllib.parse.quote('Geçersiz veya süresi dolmuş OAuth state oturumu (CSRF).')}")
+
     try:
-        token_info = sp_oauth.get_access_token(code)
-        access_token = token_info['access_token']
-        return RedirectResponse(url=f"{settings.FRONTEND_URL}?access_token={access_token}")
+        tokens = exchange_code(code)
+        fragment = urllib.parse.urlencode({
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens.get("refresh_token") or "",
+            "expires_at": tokens["expires_at"],
+        })
+        return RedirectResponse(url=f"{base_fe}/#{fragment}")
     except Exception as e:
-        return RedirectResponse(url=f"{settings.FRONTEND_URL}?error=auth_failed")
+        return RedirectResponse(url=f"{base_fe}/#error={urllib.parse.quote(f'Token değişimi başarısız: {str(e)}')}")
+
+
+@router.post("/refresh")
+def refresh_token_endpoint(req: RefreshTokenRequest):
+    """Süresi dolmak üzere olan Spotify access_token'ını refresh_token ile yeniler."""
+    try:
+        tokens = refresh_user_token(req.refresh_token)
+        return tokens
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Token yenilenemedi: {str(e)}")
+
 
 @router.post("/analyze")
 def analyze(req: AnalyzeRequest):
     result = analyze_mood(req.text)
     return result
 
+
 @router.post("/search-tracks")
 def do_search_tracks(req: SearchTracksRequest):
     sp = get_spotify_client(req.access_token)
     try:
         tracks = search_tracks(
-            sp, req.mood, req.language, req.genres, req.count, req.energy_level, req.seed_inputs
+            sp=sp,
+            mood=req.mood,
+            language=req.language,
+            genres=req.genres,
+            count=req.count,
+            energy_level=req.energy_level,
+            seed_inputs=req.seed_inputs,
+            therapy_mode=req.therapy_mode,
         )
         return {"tracks": tracks}
+    except SpotifyAuthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"message": str(e), "code": "TOKEN_EXPIRED"}
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.post("/replace-track")
 def do_replace_track(req: ReplaceTrackRequest):
     sp = get_spotify_client(req.access_token)
     try:
-        track = replace_single_track(sp, req.mood, req.exclude_ids, req.language, req.genres)
+        track = replace_single_track(
+            sp=sp,
+            mood=req.mood,
+            exclude_ids=req.exclude_ids,
+            language=req.language,
+            genres=req.genres,
+            exclude_artists=req.exclude_artists,
+        )
         if track:
             return {"track": track}
-        else:
-            raise HTTPException(status_code=404, detail="No replacement track found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Uygun alternatif şarkı bulunamadı.")
+    except SpotifyAuthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"message": str(e), "code": "TOKEN_EXPIRED"}
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.post("/save-playlist")
 def do_save_playlist(req: SavePlaylistRequest):
     if not req.access_token or req.access_token in ("null", "undefined"):
-        raise HTTPException(status_code=401, detail="Çalma listesini kaydedebilmek için Spotify hesabınızla giriş yapmalısınız.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Çalma listesini kaydedebilmek için Spotify hesabınızla giriş yapmalısınız."
+        )
     sp = get_spotify_client(req.access_token)
     try:
         link, name = save_playlist(sp, req.track_uris, req.mood_title)
         return {"link": link, "name": name}
+    except SpotifyAuthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"message": str(e), "code": "TOKEN_EXPIRED"}
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @router.post("/mood-card")
 def get_mood_card(req: MoodCardRequest):
     try:
-        img_bytes = create_mood_card(req.mood, req.doktor_notu, req.sarki_adi)
+        img_bytes = create_mood_card(
+            mood=req.mood,
+            doktor_notu=req.doktor_notu,
+            sarki_adi=req.sarki_adi,
+            sanatci_adi=req.sanatci_adi,
+            track_count=req.track_count,
+            image_url=req.image_url,
+        )
         return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

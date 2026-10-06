@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { login } from '../api/client';
 
-const Login = ({ onGuestLogin }) => {
+const Login = ({ onGuestLogin, showToast }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSpotifyLogin = async () => {
@@ -10,7 +10,7 @@ const Login = ({ onGuestLogin }) => {
       await login();
     } catch (error) {
       console.error(error);
-      alert('Spotify giriş bağlantısı başlatılamadı. Backend sunucusunun çalıştığından emin olun.');
+      showToast?.(error.message || 'Spotify giriş bağlantısı başlatılamadı.', 'error');
       setLoading(false);
     }
   };

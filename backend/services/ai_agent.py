@@ -2,41 +2,15 @@ import json
 import re
 import math
 import random
-from typing import Dict, List, Tuple
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from typing import Dict, List, Optional, Tuple
 from google import genai
+from google.genai import types as genai_types
 from backend.core.config import settings
-
-# 9 Ana Kategori ve Alt Türler
-ALT_TURLER = {
-    "neseli_pop": ["Pop & Dans", "Disco & Retro Pop", "Yaz Hitleri", "K-Pop", "Latin Pop"],
-    "huzunlu_slow": ["Slow & Balad", "Melankolik Slow", "Akustik Hüzün", "Piyano & Yağmur", "Kırık Kalpler"],
-    "enerjik_spor": ["Workout & Motivasyon", "Yüksek BPM Trap", "Power Drill", "Club & Techno Hits"],
-    "sakin_akustik": ["Lo-Fi Beats", "Akustik Gitar & Chill", "Soft Pop", "Coffeehouse Akustik", "Ambient & Dinginlik"],
-    "indie_alternatif": ["Modern Indie Rock", "Dream Pop", "Shoegaze", "Alternatif Rock", "Bohem & Nostalji"],
-    "hard_rock_metal": ["Klasik Rock", "Hard Rock", "Heavy Metal", "Nu-Metal", "Punk & Grunge"],
-    "rap_hiphop": ["Modern Trap", "Old School & Boom Bap", "Melodik Rap", "Drill & Underground"],
-    "jazz_blues": ["Smooth Jazz", "Vocal Jazz", "Blues & Soul", "Gece Mavisi Jazz"],
-    "elektronik_synth": ["Synthwave & Neon", "Deep House", "Minimal Techno", "EDM & Festival"]
-}
-
-# ==============================================================================
-# RUSSELL ÇEVRESEL DUYGU MODELİ (CIRCUMPLEX MODEL OF AFFECT)
-# 2 Boyutlu Doğrusal Vektör Uzayı:
-# - Valence (Duygusal Değerlik): -1.0 (Aşırı Negatif / Acı) <──> +1.0 (Aşırı Pozitif / Neşe)
-# - Arousal (Uyarılma / Enerji Seviyesi): 0.0 (Durgun / Uyku) <──> 1.0 (Patlayıcı Enerji / Adrenalin)
-# ==============================================================================
-
-MOOD_VECTORS = {
-    "huzunlu_slow":     {"valence": -0.85, "arousal": 0.20, "weight": 1.4},
-    "sakin_akustik":    {"valence":  0.45, "arousal": 0.20, "weight": 1.2},
-    "neseli_pop":       {"valence":  0.85, "arousal": 0.80, "weight": 1.3},
-    "enerjik_spor":     {"valence":  0.40, "arousal": 0.95, "weight": 1.3},
-    "hard_rock_metal":  {"valence": -0.65, "arousal": 0.90, "weight": 1.4},
-    "indie_alternatif": {"valence": -0.20, "arousal": 0.40, "weight": 1.1},
-    "rap_hiphop":       {"valence":  0.05, "arousal": 0.75, "weight": 1.2},
-    "jazz_blues":       {"valence":  0.25, "arousal": 0.35, "weight": 1.1},
-    "elektronik_synth": {"valence":  0.55, "arousal": 0.85, "weight": 1.2}
-}
+# 9 Ana Kategori, Alt Türler ve Russell Çevresel Duygu Modeli (Valence/Arousal) koordinatları
+# tek bir paylaşılan modülde tutulur (backend/core/moods.py).
+from backend.core.moods import ALT_TURLER, MOOD_VECTORS
 
 # Yoğunluk Çarpanları (Intensifiers & Dampeners)
 INTENSIFIERS = {
@@ -200,70 +174,124 @@ def to_ascii_normalize(text: str) -> str:
     text = re.sub(r'[^\w\s]', ' ', text)
     return ' '.join(text.split())
 
+_NEGATING_SUFFIXES = ("siz", "suz")  # rahat-sız, huzur-suz, umut-suz...
+_MIN_STEM_LEN = 4
+_MAX_SUFFIX_LEN = 6
+_UNIGRAM_KEYS = sorted((k for k in LEXICON if " " not in k), key=len, reverse=True)
+
+
+def _negate(val: float, aro: float, cat: str) -> Tuple[float, float, str]:
+    """Olumsuzluk etkisi: pozitif duygu negatife döner ve enerjisi düşer; negatif duygu nötr-sakine yumuşar."""
+    if val > 0:
+        return -abs(val) * 0.9, max(0.15, aro * 0.5), "huzunlu_slow"
+    return abs(val) * 0.4, max(0.1, aro * 0.6), "sakin_akustik"
+
+
+def _lookup(word: str) -> Optional[Tuple[float, float, str, bool]]:
+    """
+    Kelimeyi sözlükte arar. Bulunamazsa Türkçe ekleri tolere eden kök eşleşmesi dener
+    (kahvemi → kahve, sinirliyim → sinirli). '-sız/-suz' eki duyguyu tersine çevirir.
+    Dönüş: (valence, arousal, kategori, ek_ile_olumsuzlandı)
+    """
+    if word in LEXICON:
+        v, a, c = LEXICON[word]
+        return v, a, c, False
+    for key in _UNIGRAM_KEYS:
+        if len(key) < _MIN_STEM_LEN or not word.startswith(key):
+            continue
+        suffix = word[len(key):]
+        if 0 < len(suffix) <= _MAX_SUFFIX_LEN:
+            v, a, c = LEXICON[key]
+            return v, a, c, suffix.startswith(_NEGATING_SUFFIXES)
+    return None
+
+
 def calculate_linear_mood_vector(user_text: str) -> Tuple[float, float, Dict[str, float]]:
     """
     Doğrusal Vektör Analizi:
     Cümledeki kelimelerin Valence (X) ve Arousal (Y) koordinatlarını, yoğunluk çarpanları ve
     olumsuzluk terslemeleriyle ağırlıklı ortalama alarak hesaplar.
+
+    Türkçe'ye özgü kurallar:
+    - Olumsuzluk çoğunlukla duygudan SONRA gelir ("mutlu değilim") → son 2 kelimedeki eşleşme terslenir
+    - 3'lü / 2'li deyimler ("pes etmek yok", "kalbim kırık") tek kelimelerden önceliklidir, çift sayım yapılmaz
+    - Ek toleranslı kök eşleşmesi ve '-sız/-suz' olumsuzluk eki
     """
-    norm_text = to_ascii_normalize(user_text)
-    words = norm_text.split()
-    
-    total_weight = 0.0
-    weighted_valence = 0.0
-    weighted_arousal = 0.0
-    category_votes: Dict[str, float] = {m: 0.0 for m in MOOD_VECTORS}
-    
-    has_negation_context = False
+    words = to_ascii_normalize(user_text).split()
+
+    contributions: List[dict] = []  # {pos, start, val, aro, cat, weight, negated}
     current_multiplier = 1.0
+    pending_negation = False
 
     for i, word in enumerate(words):
-        # Yoğunluk Çarpanı Kontrolü
-        if word in INTENSIFIERS:
-            current_multiplier = INTENSIFIERS[word]
-            continue
-        elif word in DAMPENERS:
-            current_multiplier = DAMPENERS[word]
-            continue
-            
-        # Olumsuzluk Tespiti
-        if word in NEGATIONS:
-            has_negation_context = True
+        # Çok kelimeli deyimler (3'lü → 2'li) — kelimenin kendisi bir çarpan/olumsuzluk olsa bile önce bakılır
+        matched = None
+        for n in (3, 2):
+            if i - n + 1 < 0:
+                continue
+            phrase = " ".join(words[i - n + 1:i + 1])
+            if phrase in LEXICON:
+                v, a, c = LEXICON[phrase]
+                matched = (v, a, c, False, i - n + 1)
+                break
+
+        if matched is None:
+            # Yoğunluk Çarpanı Kontrolü
+            if word in INTENSIFIERS:
+                current_multiplier = INTENSIFIERS[word]
+                continue
+            if word in DAMPENERS:
+                current_multiplier = DAMPENERS[word]
+                continue
+
+            # Olumsuzluk Tespiti: son 2 kelime içindeki eşleşmeyi tersle, yoksa bir sonrakine uygula
+            if word in NEGATIONS:
+                recent = next((c for c in reversed(contributions) if i - c["pos"] <= 2 and not c["negated"]), None)
+                if recent:
+                    recent["val"], recent["aro"], recent["cat"] = _negate(recent["val"], recent["aro"], recent["cat"])
+                    recent["negated"] = True
+                else:
+                    pending_negation = True
+                continue
+
+            found = _lookup(word)
+            if found:
+                matched = (*found, i)
+
+        if not matched:
             continue
 
-        # Çok kelimeli deyim kontrolü (2'li ngram)
-        bigram = f"{words[i-1]} {word}" if i > 0 else ""
-        matched_key = None
-        
-        if bigram in LEXICON:
-            matched_key = bigram
-        elif word in LEXICON:
-            matched_key = word
-            
-        if matched_key:
-            val, aro, cat = LEXICON[matched_key]
-            
-            # Olumsuzluk etkisi: Pozitifse negatife çek, enerjiyi düşür
-            if has_negation_context:
-                if val > 0:
-                    val = -abs(val) * 0.9
-                    aro = max(0.15, aro * 0.5)
-                    cat = "huzunlu_slow"
-                has_negation_context = False # Tüketildi
-                
-            weight = current_multiplier * 1.5
-            weighted_valence += val * weight
-            weighted_arousal += aro * weight
-            total_weight += weight
-            category_votes[cat] += weight
-            
-            # Çarpanı sıfırla
-            current_multiplier = 1.0
+        val, aro, cat, suffix_negated, start = matched
+        # Deyimin parçaları daha önce tek kelime olarak sayıldıysa çıkar (çift sayımı önle)
+        contributions = [c for c in contributions if c["pos"] < start]
+
+        negated = False
+        if suffix_negated:
+            val, aro, cat = _negate(val, aro, cat)
+            negated = True
+        if pending_negation:
+            val, aro, cat = _negate(val, aro, cat)
+            negated = not negated
+            pending_negation = False
+
+        contributions.append({
+            "pos": i, "val": val, "aro": aro, "cat": cat,
+            "weight": current_multiplier * 1.5, "negated": negated,
+        })
+        current_multiplier = 1.0
+
+    category_votes: Dict[str, float] = {m: 0.0 for m in MOOD_VECTORS}
+    total_weight = sum(c["weight"] for c in contributions)
 
     # Varsayılan nötr koordinat
     if total_weight == 0.0:
         return 0.2, 0.25, category_votes
-        
+
+    weighted_valence = sum(c["val"] * c["weight"] for c in contributions)
+    weighted_arousal = sum(c["aro"] * c["weight"] for c in contributions)
+    for c in contributions:
+        category_votes[c["cat"]] += c["weight"]
+
     final_valence = max(-1.0, min(1.0, weighted_valence / total_weight))
     final_arousal = max(0.0, min(1.0, weighted_arousal / total_weight))
     return final_valence, final_arousal, category_votes
@@ -298,15 +326,30 @@ def analyze_mood_local(user_text: str) -> dict:
         "engine": "linear_vector_space_nlp"
     }
 
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+_gemini_client: Optional[genai.Client] = None
+_client_lock = threading.Lock()
+
+
+def _get_gemini_client() -> Optional[genai.Client]:
+    global _gemini_client
+    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.startswith("your_"):
+        return None
+    if _gemini_client is None:
+        with _client_lock:
+            if _gemini_client is None:
+                _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _gemini_client
+
 
 def _call_gemini(prompt: str) -> dict:
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = _get_gemini_client()
+    if client is None:
+        raise ValueError("Gemini API key not configured")
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model=settings.GEMINI_MODEL,
         contents=prompt,
     )
-    text = response.text.strip()
+    text = (response.text or "").strip()
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if match:
         return json.loads(match.group(0))
@@ -318,9 +361,11 @@ def _call_gemini(prompt: str) -> dict:
         text = text[:-3]
     return json.loads(text.strip())
 
+
 def analyze_mood(user_text: str) -> dict:
     """Hibrit Analiz: Gemini LLM denenir, gecikme veya API yokluğunda Doğrusal Vektör NLP motoruna düşer."""
-    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.startswith("your_"):
+    client = _get_gemini_client()
+    if client is None:
         return analyze_mood_local(user_text)
 
     prompt = f"""
@@ -342,19 +387,22 @@ Seçtiğin kategoriye göre YALNIZCA o kategoriye ait tür listesinden en uygun 
 {json.dumps(ALT_TURLER, ensure_ascii=False, indent=2)}
 
 Kullanıcıya özel 2 cümlelik empatik Türkçe bir "doktor_notu" yaz.
+Ayrıca cümlenin Russell modelindeki tahmini koordinatlarını (-1.0 ile 1.0 arası valence, 0.0 ile 1.0 arası arousal) belirle.
 
 Sadece geçerli bir JSON döndür:
 {{
     "mood": "kategori_adi",
     "doktor_notu": "Kullanıcıya özel terapist notu...",
-    "suggested_genres": ["Alt Tür 1", "Alt Tür 2"]
+    "suggested_genres": ["Alt Tür 1", "Alt Tür 2"],
+    "valence": 0.45,
+    "arousal": 0.60
 }}
 """
 
     try:
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_call_gemini, prompt)
-            data = future.result(timeout=4.0)
+            data = future.result(timeout=settings.GEMINI_TIMEOUT_SECONDS)
 
         mood = data.get("mood")
         if mood in ALT_TURLER:
@@ -362,15 +410,24 @@ Sadece geçerli bir JSON döndür:
             genres = [g for g in data.get("suggested_genres", []) if g in valid_genres]
             if not genres:
                 genres = random.sample(valid_genres, min(3, len(valid_genres)))
-            
+
+            base_vec = MOOD_VECTORS[mood]
+            val = float(data.get("valence", base_vec["valence"]))
+            aro = float(data.get("arousal", base_vec["arousal"]))
+            val = max(-1.0, min(1.0, val))
+            aro = max(0.0, min(1.0, aro))
+
             return {
                 "mood": mood,
                 "doktor_notu": data.get("doktor_notu", "Sana özel müzik reçetesi hazırlandı."),
                 "suggested_genres": genres,
-                "engine": "gemini_2.5_flash"
+                "valence": round(val, 2),
+                "arousal": round(aro, 2),
+                "engine": settings.GEMINI_MODEL,
             }
 
         return analyze_mood_local(user_text)
 
     except Exception:
         return analyze_mood_local(user_text)
+
