@@ -31,6 +31,8 @@ router = APIRouter()
 
 class AnalyzeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000, description="Kullanıcının iç döküşü / ruh hali metni")
+    seed_artists: Optional[List[str]] = Field(default_factory=list)
+    seed_tracks: Optional[List[str]] = Field(default_factory=list)
 
 
 class SearchTracksRequest(BaseModel):
@@ -144,7 +146,11 @@ def refresh_token_endpoint(req: RefreshTokenRequest):
 
 @router.post("/analyze")
 def analyze(req: AnalyzeRequest):
-    result = analyze_mood(req.text)
+    result = analyze_mood(
+        user_text=req.text,
+        seed_artists=req.seed_artists,
+        seed_tracks=req.seed_tracks,
+    )
     return result
 
 

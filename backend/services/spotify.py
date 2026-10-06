@@ -33,6 +33,7 @@ from backend.core.moods import (
     MOOD_LABELS,
     build_therapy_journey,
     energy_neighbor,
+    find_artist_info,
     split_count,
 )
 
@@ -258,7 +259,7 @@ GENRE_CURATION_MATRIX = {
         "en": ["Jack Johnson", "Boyce Avenue", "Vance Joy", "Norah Jones", "Jason Mraz", "Ben Howard", "Passenger", "Iron & Wine", "Lofi Girl", "Lauv", "Jeremy Zucker"]
     },
     "indie_alternatif": {
-        "tr": ["Adamlar", "Mor ve Ötesi", "Büyük Ev Ablukada", "Son Feci Bisiklet", "Jakuzi", "Lalalar", "Sedef Sebüktekin", "Yaşlı Amca", "Kaan Boşnak", "Hedonutopia", "Perdenin Ardındakiler", "Duman"],
+        "tr": ["Pera", "Adamlar", "Mor ve Ötesi", "Büyük Ev Ablukada", "Son Feci Bisiklet", "Jakuzi", "Lalalar", "Sedef Sebüktekin", "Yaşlı Amca", "Kaan Boşnak", "Hedonutopia", "Perdenin Ardındakiler", "Duman", "Model"],
         "en": ["Arctic Monkeys", "The Neighbourhood", "Tame Impala", "The Strokes", "Foster The People", "Gorillaz", "Radiohead", "The 1975", "Wallows", "Beach House", "Mac DeMarco", "Foals", "Lorde"]
     },
     "hard_rock_metal": {
@@ -402,7 +403,11 @@ def _resolve_seed_artists(sp, raw: str) -> Tuple[List[str], List[str]]:
 
 
 def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int = 20) -> List[dict]:
-    """Referans şarkı, sanatçı veya playlist linklerinden benzer şarkıları (paralel) çeker."""
+    """
+    Referans şarkı, sanatçı veya playlist linklerinden benzer şarkıları çeker.
+    Sanatçı kümeleme (artist directory) sayesinde referans sanatçıların tarzına
+    tam uyumlu benzer sanatçıları da sorguya dahil eder.
+    """
     seeds = [s for s in (seed_inputs or []) if s and str(s).strip()][:5]
     if not seeds:
         return []
@@ -413,11 +418,22 @@ def get_similar_tracks_from_seeds(sp, seed_inputs: List[str], count: int = 20) -
         artist_names.extend(names)
         seed_ids.update(ids)
 
-    unique_artists = list(dict.fromkeys(artist_names))[:5]
+    unique_seed_artists = list(dict.fromkeys(artist_names))[:5]
+    
+    # Kümelenmiş benzer sanatçıları topla
+    cluster_artists: List[str] = []
+    for art in unique_seed_artists:
+        info = find_artist_info(art)
+        if info and "similar" in info:
+            cluster_artists.extend(info["similar"][:4])
+
+    all_target_artists = list(dict.fromkeys(unique_seed_artists + cluster_artists))[:10]
+
     similar: List[dict] = []
-    for tracks in _seed_executor.map(lambda a: _artist_query_tracks(sp, a, market=None), unique_artists):
+    for tracks in _seed_executor.map(lambda a: _artist_query_tracks(sp, a, market=None), all_target_artists):
         similar.extend(t for t in tracks if t["id"] not in seed_ids)
     return similar
+
 
 
 # ==============================================================================
@@ -440,7 +456,8 @@ def _run_parallel(tasks: List[Tuple]) -> List[Tuple[int, str, List[dict]]]:
 
 def _pick_diverse(candidates: List[dict], n: int, used_ids: set, artist_counts: Dict[str, int]) -> List[dict]:
     """Alaka sırası + rastgelelik ile sıralar, tekrar ve sanatçı yığılmasını engeller."""
-    scored = sorted(candidates, key=lambda t: t.get("rank", 0) + random.uniform(0, 4) - (3 if t.get("_seed") else 0))
+    # _seed olan şarkılara yüksek öncelik ver (skor ne kadar küçükse o kadar öne geçer)
+    scored = sorted(candidates, key=lambda t: t.get("rank", 0) + random.uniform(0, 3) - (15 if t.get("_seed") else 0))
     picked = []
     for t in scored:
         if len(picked) >= n:

@@ -10,7 +10,7 @@ from google.genai import types as genai_types
 from backend.core.config import settings
 # 9 Ana Kategori, Alt Türler ve Russell Çevresel Duygu Modeli (Valence/Arousal) koordinatları
 # tek bir paylaşılan modülde tutulur (backend/core/moods.py).
-from backend.core.moods import ALT_TURLER, MOOD_VECTORS
+from backend.core.moods import ALT_TURLER, MOOD_VECTORS, find_artist_info
 
 # Yoğunluk Çarpanları (Intensifiers & Dampeners)
 INTENSIFIERS = {
@@ -283,9 +283,9 @@ def calculate_linear_mood_vector(user_text: str) -> Tuple[float, float, Dict[str
     category_votes: Dict[str, float] = {m: 0.0 for m in MOOD_VECTORS}
     total_weight = sum(c["weight"] for c in contributions)
 
-    # Varsayılan nötr koordinat
+    # Varsayılan nötr koordinat: sakin_akustik (asla jazz_blues'a kaymaz)
     if total_weight == 0.0:
-        return 0.2, 0.25, category_votes
+        return 0.40, 0.20, category_votes
 
     weighted_valence = sum(c["val"] * c["weight"] for c in contributions)
     weighted_arousal = sum(c["aro"] * c["weight"] for c in contributions)
@@ -296,12 +296,48 @@ def calculate_linear_mood_vector(user_text: str) -> Tuple[float, float, Dict[str
     final_arousal = max(0.0, min(1.0, weighted_arousal / total_weight))
     return final_valence, final_arousal, category_votes
 
-def analyze_mood_local(user_text: str) -> dict:
+def analyze_mood_local(
+    user_text: str,
+    seed_artists: Optional[List[str]] = None,
+    seed_tracks: Optional[List[str]] = None
+) -> dict:
     """
     Doğrusal Öklid Uzayı ve Vektör Mesafesi Tabanlı Kararlı NLP Motoru.
+    Girdi metninde veya seed listesinde belirtilen referans sanatçıları doğrudan
+    tanıyarak tür ve duygu kategorisini önceliklendirir.
     """
     u_val, u_aro, votes = calculate_linear_mood_vector(user_text)
-    
+
+    # 1. Seed sanatçıları ve metinden çıkarılan sanatçıları tespit et
+    detected_artists: List[str] = []
+    if seed_artists:
+        detected_artists.extend(seed_artists)
+
+    # Metinden sanatçı arama (örnek: "Pera dinliyorum", "Duman gibi şarkılar")
+    norm_text = to_ascii_normalize(user_text)
+    from backend.core.moods import ARTIST_DIRECTORY
+    for art_key in ARTIST_DIRECTORY:
+        # Kelime sınırlarına duyarlı arama
+        pattern = r'\b' + re.escape(art_key) + r'\b'
+        if re.search(pattern, norm_text):
+            detected_artists.append(art_key)
+
+    # 2. Sanatçı duygu oyları ve ağırlıklandırma
+    artist_mood_boost: Dict[str, float] = {m: 0.0 for m in MOOD_VECTORS}
+    for art in detected_artists:
+        info = find_artist_info(art)
+        if info and "mood" in info:
+            m = info["mood"]
+            artist_mood_boost[m] = artist_mood_boost.get(m, 0.0) + 8.0
+
+    # Eğer metinden herhangi bir kelime çıkmadıysa ama sanatçı bulunduysa koordinatı sanatçının mood vektörüne ayarla
+    total_votes = sum(votes.values())
+    has_artist_boost = sum(artist_mood_boost.values()) > 0
+    if total_votes == 0.0 and has_artist_boost:
+        top_art_mood = max(artist_mood_boost, key=artist_mood_boost.get)
+        u_val = MOOD_VECTORS[top_art_mood]["valence"]
+        u_aro = MOOD_VECTORS[top_art_mood]["arousal"]
+
     # 9 Duygu Noktasına Olan Öklid Mesafesini Hesapla
     # Distance = sqrt((v_user - v_target)^2 + (a_user - a_target)^2)
     scores: Dict[str, float] = {}
@@ -311,7 +347,9 @@ def analyze_mood_local(user_text: str) -> dict:
         proximity_score = (1.0 / (dist + 0.15)) * data["weight"]
         # Sözlük doğrudan oy vermişse ek güven puanı
         vote_bonus = votes.get(mood, 0.0) * 1.2
-        scores[mood] = proximity_score + vote_bonus
+        # Sanatçı eşleşme bonusu (en güçlü yönlendirici)
+        artist_bonus = artist_mood_boost.get(mood, 0.0)
+        scores[mood] = proximity_score + vote_bonus + artist_bonus
 
     best_mood = max(scores, key=scores.get)
     doctor_note = random.choice(DOCTOR_NOTES.get(best_mood, DOCTOR_NOTES["sakin_akustik"]))
@@ -362,15 +400,30 @@ def _call_gemini(prompt: str) -> dict:
     return json.loads(text.strip())
 
 
-def analyze_mood(user_text: str) -> dict:
+def analyze_mood(
+    user_text: str,
+    seed_artists: Optional[List[str]] = None,
+    seed_tracks: Optional[List[str]] = None
+) -> dict:
     """Hibrit Analiz: Gemini LLM denenir, gecikme veya API yokluğunda Doğrusal Vektör NLP motoruna düşer."""
     client = _get_gemini_client()
     if client is None:
-        return analyze_mood_local(user_text)
+        return analyze_mood_local(user_text, seed_artists=seed_artists, seed_tracks=seed_tracks)
+
+    seeds_info = ""
+    if seed_artists or seed_tracks:
+        parts = []
+        if seed_artists:
+            parts.append(f"Referans Sanatçılar: {', '.join(seed_artists)}")
+        if seed_tracks:
+            parts.append(f"Referans Şarkılar: {', '.join(seed_tracks)}")
+        seeds_info = f"\nKullanıcının Seçtiği Müzikal Referanslar (ÖNCELİKLİ BAZ ALINACAK):\n" + "\n".join(parts) + "\n"
 
     prompt = f"""
-Sen uzman ve analitik bir Müzik Terapistisin. Kullanıcının iç döküşünü analiz et:
+Sen uzman ve analitik bir Müzik Terapistisin. Kullanıcının iç döküşünü ve seçtiği referans müzikleri analiz et:
 "{user_text}"
+{seeds_info}
+ÖNEMLİ: Eğer kullanıcı referans sanatçılar veya şarkılar belirttiyse (örneğin rock, indie, pop, rap vb.), bu sanatçıların gerçek müzik türünü ve hissettirdiği duyguyu BİRİNCİL ÖNCELİK olarak dikkate al. İlgisiz klasik müzik veya jazz gibi alakasız kategoriler seçme!
 
 Aşağıdaki 9 kategoriden Russell Çevresel Duygu Modeline (Valence/Arousal) göre en uygun KESİN BİR kategoriyi seç:
 - neseli_pop (Pozitif, yüksek enerji, dans, parti)
@@ -378,7 +431,7 @@ Aşağıdaki 9 kategoriden Russell Çevresel Duygu Modeline (Valence/Arousal) g�
 - enerjik_spor (Yüksek enerji, motivasyon, antrenman, güç)
 - sakin_akustik (Pozitif/Nötr, düşük enerji, chill, huzur, kahve)
 - hard_rock_metal (Negatif, yüksek enerji, öfke, isyan, sert)
-- indie_alternatif (Derin düşünce, gece yürüyüşü, bohem, özgün)
+- indie_alternatif (Derin düşünce, gece yürüyüşü, bohem, özgün, alternatif rock)
 - rap_hiphop (Ritmik, sözlerin gücü, sokak, beat)
 - jazz_blues (Zarif, loş ışıklar, gece mavisi, saksafon)
 - elektronik_synth (Neon, rave, tekno, fütüristik)
@@ -426,8 +479,9 @@ Sadece geçerli bir JSON döndür:
                 "engine": settings.GEMINI_MODEL,
             }
 
-        return analyze_mood_local(user_text)
+        return analyze_mood_local(user_text, seed_artists=seed_artists, seed_tracks=seed_tracks)
 
     except Exception:
-        return analyze_mood_local(user_text)
+        return analyze_mood_local(user_text, seed_artists=seed_artists, seed_tracks=seed_tracks)
+
 

@@ -101,11 +101,15 @@ export const login = async () => {
   window.location.href = data.auth_url;
 };
 
-export const analyze = async (text) => {
+export const analyze = async (text, seedArtists = [], seedTracks = []) => {
   const res = await fetch(`${BASE_URL}/api/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({
+      text,
+      seed_artists: seedArtists || [],
+      seed_tracks: seedTracks || [],
+    }),
   });
   await handleResponse(res);
   return res.json();

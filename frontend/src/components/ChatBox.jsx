@@ -106,11 +106,14 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
     setLoading(true);
     try {
       let queryText = textToAnalyze.trim();
+      const seedArtists = selectedTracks.map(t => t.artist).filter(Boolean);
+      const seedTracks = selectedTracks.map(t => `${t.name} - ${t.artist}`).filter(Boolean);
+
       if (!queryText && hasSeeds) {
-        queryText = `Sevdiğim referans parçalar: ${selectedTracks.map(t => `${t.name} - ${t.artist}`).join(', ')}`;
+        queryText = `Sevdiğim referans parçalar: ${seedTracks.join(', ')}`;
       }
 
-      const result = await analyze(queryText);
+      const result = await analyze(queryText, seedArtists, seedTracks);
       setAnalysisResult(result);
       if (result.suggested_genres && result.suggested_genres.length > 0) {
         setSelectedGenres(result.suggested_genres);
@@ -128,7 +131,8 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
   const handleSearch = async () => {
     setLoading(true);
     try {
-      const seed_inputs = selectedTracks.map(t => t.name ? `${t.name} ${t.artist}` : t.id);
+      // Seed araması için önce varsa Spotify URI / ID, yoksa artist + name kullan
+      const seed_inputs = selectedTracks.map(t => t.uri || (t.id ? `spotify:track:${t.id}` : `${t.artist} ${t.name}`));
       const params = {
         access_token: accessToken || null,
         mood: analysisResult.mood,

@@ -122,6 +122,20 @@ def test_nlp_turkish_post_negation():
     assert val_not_happy < 0
 
 
+def test_nlp_seed_artist_consistency():
+    # Pera seed tracks must diagnose as indie_alternatif, not jazz_blues
+    res = analyze_mood_local("Sevdiğim referans parçalar: Sensiz Ben - Pera, Ne Ala - Pera", seed_artists=["Pera"])
+    assert res["mood"] == "indie_alternatif"
+
+    # Even with text only mentioning Pera
+    res2 = analyze_mood_local("Pera dinliyorum, benzer şarkılar bul")
+    assert res2["mood"] == "indie_alternatif"
+
+    # Default neutral text without words must fall back to sakin_akustik, never jazz_blues
+    res_empty = analyze_mood_local("xyz abc 123")
+    assert res_empty["mood"] == "sakin_akustik"
+
+
 # ==============================================================================
 # 3. SPOTIFY SECURITY & TOKEN MANAGEMENT
 # ==============================================================================
