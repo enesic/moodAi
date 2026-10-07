@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { analyze, searchTracks, searchAutocomplete } from '../api/client';
+import VoiceRecorder from './VoiceRecorder';
 
 const DEFAULT_QUICK_MOODS = [
   { emoji: "☕", label: "Sakin & Dinlenme", text: "Bugün çok yoruldum, biraz sakinleşmek, kahvemi içip kafamı dinlemek istiyorum." },
@@ -10,7 +11,16 @@ const DEFAULT_QUICK_MOODS = [
   { emoji: "🔥", label: "Öfke & Deşarj", text: "Her şey üstüme geliyor, çok sinirliyim ve öfkemi müzikle dışarı vurmak istiyorum." },
 ];
 
-const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) => {
+const ChatBox = ({
+  onAnalyzed,
+  onTracksReady,
+  accessToken,
+  meta,
+  showToast,
+  isPro,
+  onOpenProModal,
+  onCheckLimit,
+}) => {
   const [activeTab, setActiveTab] = useState('therapist'); // 'therapist' veya 'search'
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,6 +33,7 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
   const [count, setCount] = useState(20);
   const [energyLevel, setEnergyLevel] = useState('Orta');
   const [therapyMode, setTherapyMode] = useState('catharsis');
+  const [binauralEnabled, setBinauralEnabled] = useState(false);
 
   // iLoveThatTrack modu
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,6 +114,10 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
       return;
     }
 
+    if (onCheckLimit && !onCheckLimit()) {
+      return;
+    }
+
     setLoading(true);
     try {
       let queryText = textToAnalyze.trim();
@@ -132,7 +147,10 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
     setLoading(true);
     try {
       // Seed araması için önce varsa Spotify URI / ID, yoksa artist + name kullan
-      const seed_inputs = selectedTracks.map(t => t.uri || (t.id ? `spotify:track:${t.id}` : `${t.artist} ${t.name}`));
+      let seed_inputs = selectedTracks.map(t => t.uri || (t.id ? `spotify:track:${t.id}` : `${t.artist} ${t.name}`));
+      if (binauralEnabled) {
+        seed_inputs = [...seed_inputs, '432 Hz Healing Meditation Ambient'];
+      }
       const params = {
         access_token: accessToken || null,
         mood: analysisResult.mood,
@@ -215,6 +233,32 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
         )}
       </div>
 
+      {/* Adım Göstergesi (Stepper) */}
+      <div className="flex items-center gap-2 mb-6 pb-2 border-b border-white/5">
+        <div
+          onClick={() => step === 2 && setStep(1)}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+            step === 1
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+              : 'bg-white/5 text-gray-400 hover:text-white'
+          }`}
+        >
+          <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">1</span>
+          <span>Duygu Analizi</span>
+        </div>
+        <div className="w-6 h-px bg-white/15" />
+        <div
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+            step === 2
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md shadow-pink-600/30'
+              : 'bg-white/5 text-gray-500'
+          }`}
+        >
+          <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px]">2</span>
+          <span>Reçete Dozajı</span>
+        </div>
+      </div>
+
       {step === 1 && (
         <div className="space-y-4">
           {/* TAB 1: Terapi Koltuğu (Duygu Yazarak) */}
@@ -225,28 +269,60 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                   Hızlı Ruh Hali Şablonları
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-3.5">
-                  {DEFAULT_QUICK_MOODS.map((qm, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setText(qm.text)}
-                      className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-purple-600/25 border border-white/10 hover:border-purple-400/40 text-xs font-medium text-gray-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
-                    >
-                      <span>{qm.emoji}</span>
-                      <span>{qm.label}</span>
-                    </button>
-                  ))}
+                  {DEFAULT_QUICK_MOODS.map((qm, idx) => {
+                    const isSelected = text === qm.text;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setText(qm.text)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                          isSelected
+                            ? 'bg-purple-600 text-white border border-purple-400 shadow-md shadow-purple-600/30 scale-105'
+                            : 'bg-white/5 hover:bg-purple-600/25 border border-white/10 hover:border-purple-400/40 text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        <span>{qm.emoji}</span>
+                        <span>{qm.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <label className="block text-gray-300 text-xs font-semibold mb-2">
-                  Şu an nasıl hissediyorsun? İçinden geçenleri serbestçe yaz...
-                </label>
-                <textarea
-                  className="w-full h-28 glass-input rounded-2xl p-4 text-white placeholder-gray-500 focus:outline-none resize-none text-sm leading-relaxed"
-                  placeholder="Örn: Çok yoğun bir haftaydı, kahvemi alıp arkama yaslanmak istiyorum..."
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                  <label className="block text-gray-300 text-xs font-semibold">
+                    Şu an nasıl hissediyorsun? İçinden geçenleri serbestçe yaz...
+                  </label>
+                  <VoiceRecorder
+                    onTranscriptionComplete={(recordedText) => {
+                      setText((prev) => (prev ? `${prev} ${recordedText}` : recordedText));
+                    }}
+                    showToast={showToast}
+                    isPro={isPro}
+                    onOpenProModal={onOpenProModal}
+                  />
+                </div>
+                <div className="relative">
+                  <textarea
+                    className="w-full h-28 glass-input rounded-2xl p-4 text-white placeholder-gray-500 focus:outline-none resize-none text-sm leading-relaxed"
+                    placeholder="Örn: Çok yoğun bir haftaydı, kahvemi alıp arkama yaslanmak istiyorum..."
+                    value={text}
+                    maxLength={2000}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                  <div className="flex justify-between items-center px-2 pt-1 text-[10px] text-gray-500">
+                    {text && (
+                      <button
+                        type="button"
+                        onClick={() => setText('')}
+                        className="hover:text-gray-300 cursor-pointer"
+                      >
+                        ✕ Temizle
+                      </button>
+                    )}
+                    <span className="ml-auto font-mono">{text.length}/2000</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -503,6 +579,41 @@ const ChatBox = ({ onAnalyzed, onTracksReady, accessToken, meta, showToast }) =>
                 <option value="Yüksek">Yüksek (Dinamik / Yüksek BPM)</option>
               </select>
             </div>
+          </div>
+
+          {/* PRO: 432 Hz Şifa & Binaural Beats Toggle */}
+          <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-950/30 to-purple-950/30 border border-amber-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🧘</span>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-white">432 Hz Şifa & Binaural Frekanslar</span>
+                  <span className="px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase border border-amber-400/40">
+                    PRO
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400">Reçeteye zihni sakinleştiren şifa dalgalarını harmanla</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!isPro) {
+                  onOpenProModal?.('432 Hz Şifa & Binaural Frekans modu Mood AI PRO üyelerine özeldir.');
+                  return;
+                }
+                setBinauralEnabled(!binauralEnabled);
+              }}
+              className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                binauralEnabled ? 'bg-amber-500' : 'bg-gray-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${
+                  binauralEnabled ? 'left-5.5' : 'left-0.5'
+                }`}
+              />
+            </button>
           </div>
 
           {/* Şarkı Sayısı Slider */}

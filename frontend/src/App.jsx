@@ -3,12 +3,19 @@ import Login from './components/Login';
 import ChatBox from './components/ChatBox';
 import MoodCard from './components/MoodCard';
 import Playlist from './components/Playlist';
+import MoodJournalModal from './components/MoodJournalModal';
+import VibeCheckModal from './components/VibeCheckModal';
+import ProUpgradeModal from './components/ProUpgradeModal';
 import {
   getMeta,
   getStoredAuth,
   setStoredAuth,
   clearStoredAuth,
   refreshAccessToken,
+  getProStatus,
+  setProStatus,
+  getDailyUsage,
+  incrementDailyUsage,
 } from './api/client';
 
 function App() {
@@ -31,6 +38,14 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showRussellMap, setShowRussellMap] = useState(false);
 
+  // Pro & Yeni Özellik Modalleri
+  const [isPro, setIsPro] = useState(() => getProStatus());
+  const [dailyUsage, setDailyUsage] = useState(() => getDailyUsage());
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [showVibeModal, setShowVibeModal] = useState(false);
+  const [showProModal, setShowProModal] = useState(false);
+  const [proModalMessage, setProModalMessage] = useState('');
+
   // Toast Bildirim Sistemi
   const [toasts, setToasts] = useState([]);
   const showToast = useCallback((message, type = 'info') => {
@@ -40,6 +55,24 @@ function App() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   }, []);
+
+  const handleOpenProModal = (msg) => {
+    setProModalMessage(msg || '');
+    setShowProModal(true);
+  };
+
+  const handleCheckLimit = () => {
+    if (isPro) return true;
+    const current = getDailyUsage();
+    if (current.remaining <= 0) {
+      handleOpenProModal('Bugünkü 3 adet ücretsiz analiz hakkınızı doldurdunuz. Sınırsız analiz ve 432 Hz şifa frekansları için PRO\'ya yükseltin!');
+      showToast('Günlük ücretsiz analiz limitinize ulaştınız. 👑', 'warning');
+      return false;
+    }
+    const updated = incrementDailyUsage();
+    setDailyUsage(updated);
+    return true;
+  };
 
   // 1. Meta veriyi yükle
   useEffect(() => {
@@ -118,6 +151,16 @@ function App() {
     setAnalysisResult(result);
   };
 
+  // URL'den Vibe Check daveti kontrolü
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const vibeFrom = params.get('vibe_from');
+    if (vibeFrom) {
+      setShowVibeModal(true);
+      showToast(`${decodeURIComponent(vibeFrom)} seni Vibe Check'e davet etti! ⚡`, 'info');
+    }
+  }, [showToast]);
+
   const handleTracksReady = (newTracks, params) => {
     setTracks(newTracks);
     setSearchParams(params);
@@ -126,6 +169,7 @@ function App() {
     if (analysisResult && newTracks.length > 0) {
       const entry = {
         id: Date.now(),
+        isoDate: new Date().toISOString().slice(0, 10),
         date: new Date().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
         mood: analysisResult.mood,
         doktor_notu: analysisResult.doktor_notu,
@@ -136,7 +180,7 @@ function App() {
         tracks: newTracks,
         params,
       };
-      const updated = [entry, ...history.filter(h => h.id !== entry.id)].slice(0, 8);
+      const updated = [entry, ...history.filter(h => h.id !== entry.id)].slice(0, 30);
       setHistory(updated);
       try {
         localStorage.setItem('moodai_history', JSON.stringify(updated));
@@ -207,72 +251,131 @@ function App() {
         })}
       </div>
 
-      {/* Header */}
-      <header className="max-w-7xl mx-auto mb-8 flex justify-between items-center pb-2">
-        <div className="flex items-center gap-3.5">
-          <div className="text-3xl sm:text-4xl bg-purple-500/15 p-2 sm:p-2.5 rounded-2xl border border-purple-400/25 shadow-lg backdrop-blur-md">
-            🧠
+      {/* Sticky Glass Navbar */}
+      <header className="sticky top-0 -mx-4 md:-mx-8 px-4 md:px-8 py-3.5 mb-8 z-40 backdrop-blur-2xl bg-[#0c061a]/75 border-b border-white/[0.08] transition-all">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          {/* Logo & Marka */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 p-0.5 shadow-lg shadow-purple-500/25">
+              <div className="w-full h-full bg-[#120a26] rounded-[14px] flex items-center justify-center text-xl">
+                🧠
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg md:text-xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-200 via-pink-200 to-indigo-200">
+                  Mood AI
+                </h1>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black border border-purple-400/30 uppercase tracking-widest">
+                  v2.0
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-400 font-medium hidden sm:block">Yapay Zeka Destekli Müzik Terapisti</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-pink-300 to-indigo-300">
-              Mood AI
-            </h1>
-            <p className="text-[11px] sm:text-xs text-gray-400 font-medium">Yapay Zeka Destekli Müzik Terapisti</p>
+
+          {/* Orta: Masaüstü Hızlı Sekmeler (Desktop Nav Pills) */}
+          <nav className="hidden lg:flex items-center bg-black/40 p-1 rounded-2xl border border-white/10 text-xs">
+            <button
+              type="button"
+              className="px-3.5 py-1.5 rounded-xl font-bold bg-white/10 text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>🛋️</span>
+              <span>Terapi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVibeModal(true)}
+              className="px-3.5 py-1.5 rounded-xl font-semibold text-gray-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer hover:bg-white/5"
+            >
+              <span className="text-pink-400">⚡</span>
+              <span>Vibe Check</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-ping" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowJournalModal(true)}
+              className="px-3.5 py-1.5 rounded-xl font-semibold text-gray-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer hover:bg-white/5"
+            >
+              <span>📅</span>
+              <span>Duygu Günlüğü</span>
+            </button>
+            {analysisResult && (
+              <button
+                type="button"
+                onClick={() => setShowRussellMap(true)}
+                className="px-3.5 py-1.5 rounded-xl font-semibold text-indigo-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer hover:bg-white/5"
+              >
+                <span>🧭</span>
+                <span>Duygu Haritası</span>
+              </button>
+            )}
+          </nav>
+
+          {/* Sağ Eylemler: Pro, Spotify, Profil */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Pro Rozeti veya Yükselt Butonu */}
+            {isPro ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-purple-500/20 border border-amber-400/40 text-amber-300 rounded-xl text-xs font-black shadow-sm">
+                <span>👑</span>
+                <span className="hidden sm:inline">PRO ÜYE</span>
+              </span>
+            ) : (
+              <button
+                onClick={() => handleOpenProModal()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 via-pink-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-black font-black rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95"
+                title="Kalan ücretsiz haklarınızı sınırsıza yükseltin"
+              >
+                <span>👑</span>
+                <span className="hidden sm:inline">Pro'ya Geç</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-black/30 text-[10px] text-white font-mono">
+                  {dailyUsage.remaining}/3
+                </span>
+              </button>
+            )}
+
+            {/* Geçmiş Reçeteler Butonu */}
+            {history.length > 0 && (
+              <button
+                onClick={() => setShowHistory(true)}
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <span>📜</span>
+                <span className="hidden sm:inline">Geçmiş</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-purple-500/30 text-[10px] font-bold text-purple-200">{history.length}</span>
+              </button>
+            )}
+
+            {/* Spotify Durumu / Giriş */}
+            {accessToken ? (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#1DB954]/10 border border-[#1DB954]/30 text-[#1ed760] rounded-xl text-xs font-bold shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-[#1ed760] animate-pulse" />
+                <span className="hidden sm:inline">Spotify</span> Bağlı
+              </span>
+            ) : (
+              <a
+                href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/login`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1DB954] hover:bg-[#1ed760] text-black font-black rounded-xl text-xs transition-all shadow-md shadow-green-500/20 hover:scale-105"
+              >
+                <span>🎵</span>
+                <span className="hidden sm:inline">Spotify ile</span> Bağlan
+              </a>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="p-2 sm:px-3 sm:py-1.5 bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 rounded-xl transition-all border border-transparent hover:border-rose-500/30 text-xs font-semibold cursor-pointer"
+              title="Çıkış Yap"
+            >
+              <span className="sm:hidden">✕</span>
+              <span className="hidden sm:inline">Çıkış</span>
+            </button>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Russell Modeli Haritası Butonu */}
-          {analysisResult && (
-            <button
-              onClick={() => setShowRussellMap(true)}
-              className="px-3.5 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
-              title="Russell Çevresel Duygu Haritası"
-            >
-              <span>🧭</span>
-              <span className="hidden md:inline">Duygu Haritası</span>
-            </button>
-          )}
-
-          {/* Geçmiş Reçeteler Butonu */}
-          {history.length > 0 && (
-            <button
-              onClick={() => setShowHistory(true)}
-              className="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
-            >
-              <span>📜</span>
-              <span className="hidden sm:inline">Geçmiş</span>
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/30 text-[10px] font-bold text-purple-200">{history.length}</span>
-            </button>
-          )}
-
-          {/* Spotify Durumu / Giriş */}
-          {accessToken ? (
-            <span className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#1DB954]/10 border border-[#1DB954]/30 text-[#1ed760] rounded-full text-xs font-bold shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-[#1ed760] animate-pulse" />
-              <span className="hidden sm:inline">Spotify</span> Bağlı
-            </span>
-          ) : (
-            <a
-              href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/login`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold rounded-full text-xs transition-all shadow-md shadow-green-500/20 hover:scale-105"
-            >
-              <span>🎵</span>
-              <span className="hidden sm:inline">Spotify ile</span> Bağlan
-            </a>
-          )}
-
-          <button
-            onClick={handleLogout}
-            className="px-3.5 py-2 bg-white/5 hover:bg-rose-500/20 text-gray-400 hover:text-rose-300 rounded-xl transition-all border border-transparent hover:border-rose-500/30 text-xs font-semibold cursor-pointer"
-          >
-            Çıkış
-          </button>
         </div>
       </header>
 
       {/* Ana Grid */}
-      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-20 md:pb-8">
         <div className="lg:col-span-5 space-y-6">
           <ChatBox
             accessToken={accessToken}
@@ -280,6 +383,9 @@ function App() {
             onAnalyzed={handleAnalyzed}
             onTracksReady={handleTracksReady}
             showToast={showToast}
+            isPro={isPro}
+            onOpenProModal={handleOpenProModal}
+            onCheckLimit={handleCheckLimit}
           />
 
           {analysisResult && (
@@ -311,20 +417,91 @@ function App() {
               />
             </div>
           ) : (
-            <div className="h-full glass-panel rounded-3xl flex flex-col items-center justify-center p-10 text-center relative overflow-hidden group">
-              <div className="w-20 h-20 rounded-3xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-4xl mb-5 shadow-inner">
-                🎧
+            <div className="h-full glass-panel rounded-3xl flex flex-col items-center justify-center p-8 sm:p-12 text-center relative overflow-hidden group">
+              {/* Arka Plan Dönen Vinil Görseli / Aura */}
+              <div className="absolute w-72 h-72 rounded-full bg-purple-600/10 blur-3xl pointer-events-none animate-pulseGlow" />
+
+              <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-purple-500/20 via-pink-500/20 to-indigo-500/20 border border-purple-400/30 flex items-center justify-center text-5xl mb-6 shadow-2xl relative">
+                <span className="animate-float">🎧</span>
+                <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#120a26] flex items-center justify-center text-[10px]">
+                  ✨
+                </span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
-                Müzik Reçeten Burada Belirecek
+
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">
+                Müzikal Terapi Reçeten Burada Belirecek
               </h3>
-              <p className="text-gray-400 text-sm max-w-sm leading-relaxed">
-                Ruh halini yazıp veya sevdiğin parçaları seçip <strong className="text-purple-300">"Reçeteyi Oluştur"</strong> butonuna bastığında sana özel hazırladığımız terapi listesi ve Spotify çaları burada açılacak.
+              <p className="text-gray-300 text-xs sm:text-sm max-w-md leading-relaxed mb-6">
+                Ruh halini yazıp veya sevdiğin parçaları seçtiğinde, yapay zeka psikolojik durumuna özel iyileştirici parça listeni ve Spotify çalarını anında burada açacak.
               </p>
+
+              {/* 3 Hızlı İpucu Rozetleri */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-lg w-full text-left">
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <span className="text-xs font-bold text-purple-300 block mb-0.5">1. İçini Dök</span>
+                  <p className="text-[11px] text-gray-400">Yazarak veya mikrofona konuşarak anlat.</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <span className="text-xs font-bold text-pink-300 block mb-0.5">2. Dozajı Ayarla</span>
+                  <p className="text-[11px] text-gray-400">Sakinleş, yüksel veya deşarj ol.</p>
+                </div>
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <span className="text-xs font-bold text-emerald-300 block mb-0.5">3. Dinle & Paylaş</span>
+                  <p className="text-[11px] text-gray-400">Spotify'a ekle, Instagram'da paylaş.</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </main>
+
+      {/* Mobilde Sabit Alt Navigasyon Barı (Native App Feel) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0e0720]/95 backdrop-blur-2xl border-t border-white/10 px-4 py-2.5 flex justify-around items-center shadow-2xl">
+        <button
+          type="button"
+          className="flex flex-col items-center gap-1 text-purple-400 font-bold text-[10px]"
+        >
+          <span className="text-lg">🛋️</span>
+          <span>Terapi</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowVibeModal(true)}
+          className="flex flex-col items-center gap-1 text-gray-400 hover:text-pink-400 text-[10px]"
+        >
+          <span className="text-lg">⚡</span>
+          <span>Vibe</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowJournalModal(true)}
+          className="flex flex-col items-center gap-1 text-gray-400 hover:text-purple-300 text-[10px]"
+        >
+          <span className="text-lg">📅</span>
+          <span>Günlük</span>
+        </button>
+        {history.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowHistory(true)}
+            className="flex flex-col items-center gap-1 text-gray-400 hover:text-white text-[10px] relative"
+          >
+            <span className="text-lg">📜</span>
+            <span>Geçmiş</span>
+            <span className="absolute -top-1 right-1 w-3.5 h-3.5 rounded-full bg-purple-600 text-white text-[9px] font-bold flex items-center justify-center">
+              {history.length}
+            </span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => handleOpenProModal()}
+          className="flex flex-col items-center gap-1 text-amber-400 font-bold text-[10px]"
+        >
+          <span className="text-lg">👑</span>
+          <span>PRO</span>
+        </button>
+      </div>
 
       {/* Reçete Geçmişi Drawer/Modal */}
       {showHistory && (
@@ -444,6 +621,39 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Duygu Takvimi Modalı */}
+      <MoodJournalModal
+        isOpen={showJournalModal}
+        onClose={() => setShowJournalModal(false)}
+        history={history}
+        onRestoreItem={handleRestoreHistory}
+        isPro={isPro}
+        onOpenProModal={handleOpenProModal}
+        showToast={showToast}
+      />
+
+      {/* Vibe Check Viral Modalı */}
+      <VibeCheckModal
+        isOpen={showVibeModal}
+        onClose={() => setShowVibeModal(false)}
+        currentUserMood={analysisResult?.mood || 'sakin_akustik'}
+        accessToken={accessToken}
+        showToast={showToast}
+        onCommonTracksReady={handleTracksReady}
+      />
+
+      {/* Pro Satış & Abonelik Modalı */}
+      <ProUpgradeModal
+        isOpen={showProModal}
+        onClose={() => setShowProModal(false)}
+        customMessage={proModalMessage}
+        onProActivated={() => {
+          setIsPro(true);
+          setDailyUsage(getDailyUsage());
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 }

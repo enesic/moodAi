@@ -20,7 +20,7 @@ from backend.services.spotify import (
     verify_oauth_state,
 )
 from backend.services.ai_agent import analyze_mood
-from backend.utils.image_gen import create_mood_card
+from backend.utils.image_gen import create_mood_card, create_vibe_card
 
 router = APIRouter()
 
@@ -71,6 +71,18 @@ class MoodCardRequest(BaseModel):
     sarki_adi: str = Field(..., max_length=200)
     sanatci_adi: Optional[str] = Field(default=None, max_length=200)
     track_count: int = Field(default=20, ge=1, le=100)
+    image_url: Optional[str] = None
+
+
+class VibeCardRequest(BaseModel):
+    user1_name: str = Field(default="Sen", max_length=50)
+    user2_name: str = Field(default="Arkadaşın", max_length=50)
+    mood1_label: str = Field(..., max_length=50)
+    mood2_label: str = Field(..., max_length=50)
+    match_score: int = Field(default=85, ge=0, le=100)
+    verdict: str = Field(..., max_length=500)
+    sarki_adi: str = Field(..., max_length=200)
+    sanatci_adi: Optional[str] = Field(default=None, max_length=200)
     image_url: Optional[str] = None
 
 
@@ -238,3 +250,23 @@ def get_mood_card(req: MoodCardRequest):
         return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/vibe-card")
+def get_vibe_card(req: VibeCardRequest):
+    try:
+        img_bytes = create_vibe_card(
+            user1_name=req.user1_name,
+            user2_name=req.user2_name,
+            mood1_label=req.mood1_label,
+            mood2_label=req.mood2_label,
+            match_score=req.match_score,
+            verdict=req.verdict,
+            sarki_adi=req.sarki_adi,
+            sanatci_adi=req.sanatci_adi,
+            image_url=req.image_url,
+        )
+        return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+

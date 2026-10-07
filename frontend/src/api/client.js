@@ -166,3 +166,74 @@ export const getMoodCard = async (params) => {
   await handleResponse(res);
   return res.blob();
 };
+
+export const getVibeCard = async (params) => {
+  const res = await fetch(`${BASE_URL}/api/vibe-card`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  await handleResponse(res);
+  return res.blob();
+};
+
+// ==============================================================================
+// PRO & FREEMIUM MONETİZASYON YARDIMCILARI
+// ==============================================================================
+
+const DAILY_FREE_LIMIT = 3;
+
+export const getProStatus = () => {
+  try {
+    return localStorage.getItem('moodai_pro') === 'true';
+  } catch (_) {
+    return false;
+  }
+};
+
+export const setProStatus = (status) => {
+  try {
+    if (status) {
+      localStorage.setItem('moodai_pro', 'true');
+    } else {
+      localStorage.removeItem('moodai_pro');
+    }
+  } catch (_) {}
+};
+
+export const getDailyUsage = () => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const raw = localStorage.getItem('moodai_daily_usage');
+    if (!raw) return { count: 0, date: today, remaining: DAILY_FREE_LIMIT };
+    const parsed = JSON.parse(raw);
+    if (parsed.date !== today) {
+      return { count: 0, date: today, remaining: DAILY_FREE_LIMIT };
+    }
+    const count = parsed.count || 0;
+    return {
+      count,
+      date: today,
+      remaining: Math.max(0, DAILY_FREE_LIMIT - count),
+    };
+  } catch (_) {
+    return { count: 0, date: new Date().toISOString().slice(0, 10), remaining: DAILY_FREE_LIMIT };
+  }
+};
+
+export const incrementDailyUsage = () => {
+  const current = getDailyUsage();
+  const nextCount = current.count + 1;
+  try {
+    localStorage.setItem(
+      'moodai_daily_usage',
+      JSON.stringify({ date: current.date, count: nextCount })
+    );
+  } catch (_) {}
+  return {
+    count: nextCount,
+    date: current.date,
+    remaining: Math.max(0, DAILY_FREE_LIMIT - nextCount),
+  };
+};
+
